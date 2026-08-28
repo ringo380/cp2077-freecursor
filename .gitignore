@@ -1,0 +1,15 @@
+# Staged/packaged output ready for Vortex import
+/dist/
+
+# Native build artifacts. NOTE: no bare `bin/` rule here - the CET Lua source
+# lives at the game-relative path bin/x64/plugins/cyber_engine_tweaks/mods/
+# FreeCursor/, and a `bin/` rule would silently exclude the whole mod.
+build/
+out/
+*.obj
+*.pdb
+
+# Editor/OS cruft
+.vs/
+*.user
+Thumbs.db

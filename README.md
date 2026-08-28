@@ -1,0 +1,198 @@
+# FreeCursor
+
+An accessibility mod for Cyberpunk 2077. It lets you detach your Windows mouse
+pointer from the game on a hotkey, so you can aim **Windows Magnifier** at
+on-screen text and read it, then reattach and keep playing.
+
+## Why this exists
+
+Cyberpunk 2077 locks the OS mouse pointer to the center of the screen during
+normal play, and across most menus too. Windows Magnifier's "follow the mouse
+pointer" mode tracks that OS pointer - so if the game never lets it move,
+Magnifier stays stuck magnifying the middle of the screen and can never be
+pointed at the dialogue, item description, or menu text you actually need to
+read. This is a real barrier for a player with a vision impairment who relies
+on Magnifier.
+
+FreeCursor frees the OS pointer on demand so you can move it wherever you need
+to read, without pausing the game, opening a menu, or leaving your session.
+
+## What it does - and does not do
+
+- Press a hotkey (you choose the key - see Install below) to **detach**: the
+  OS pointer is released so Magnifier can follow it. Press the same hotkey
+  again to **reattach**.
+- It does not open any menu, does not pause the game, and does not touch
+  Windows Magnifier itself. Magnifier is still a separate, user-driven tool -
+  turn it on however you normally do (e.g. Win + `+`). FreeCursor only makes
+  sure the OS pointer is free to move once Magnifier is following it.
+- There is no settings menu, no configurable keybind default, and no
+  controller support. The hotkey must be bound by hand (below) before the mod
+  does anything.
+
+## Requirements
+
+- Cyberpunk 2077 **patch 2.31** (game file version `3.0.80.51928`). The
+  plugin declares this exact runtime to RED4ext. On any other game version,
+  **RED4ext silently refuses to load the plugin** - nothing crashes, nothing
+  errors, the mod just does nothing. This is the single most likely reason
+  the hotkey appears to do nothing; see Troubleshooting.
+- **Cyber Engine Tweaks (CET) v1.37.1** or a compatible version.
+- **RED4ext**, matching the game version above.
+- **Borderless windowed** display mode. Windows Magnifier does not reliably
+  composite over an exclusive-fullscreen DX12 swapchain - if you're in true
+  fullscreen, Magnifier may not track correctly even with the cursor free.
+
+## Install
+
+FreeCursor has two parts that both need to be in place - a native RED4ext
+plugin and a CET Lua mod. Copy these into your game install (paths below are
+relative to your Cyberpunk 2077 folder):
+
+```
+red4ext/plugins/FreeCursor/FreeCursor.dll
+bin/x64/plugins/cyber_engine_tweaks/mods/FreeCursor/init.lua
+bin/x64/plugins/cyber_engine_tweaks/mods/FreeCursor/state.lua
+bin/x64/plugins/cyber_engine_tweaks/mods/FreeCursor/External/GameUI.lua
+```
+
+If you manage mods with **Vortex**, stage this same layout into a folder and
+import/zip it for Vortex rather than copying files into the game install
+directly - a manual copy will get clobbered on Vortex's next deployment.
+
+`stage-mod.ps1` in the sibling `cp2077-tooling` repo does the filtering for
+you: run it from this repo's root and it copies `bin/` and `red4ext/` into
+`dist/cp2077-freecursor`, dropping `src/`, `build/` and `CMakeLists.txt`. It
+stages source only, so copy the built `FreeCursor.dll` into the staged
+`red4ext/plugins/FreeCursor/` yourself before zipping.
+
+**After installing, you must bind the hotkey yourself:** open CET's overlay
+(default `~`), go to **Bindings**, find **"Toggle free cursor"** under the
+FreeCursor mod, and assign a key. There is no default binding - until you set
+one, the mod loads but the hotkey does nothing.
+
+## Usage
+
+Press your bound hotkey to detach the cursor, move Magnifier wherever you
+need to read, then press it again to reattach. Behavior depends on what's on
+screen:
+
+| Context | Cursor | Mouse input to the game |
+|---|---|---|
+| Normal gameplay | freed | swallowed - your camera holds still while you read |
+| Menu or phone/texting UI | freed | passes through normally (clicks work) - **except the mouse wheel** |
+| Loading, a scene, braindance, photo mode, or the main menu (no active session) | detach is refused | unchanged |
+
+The game keeps running in real time while detached - nothing pauses.
+
+**Known limitation: the mouse wheel is blocked in every context while
+detached, including menus.** This is deliberate, not a bug: Magnifier zooms
+with **Ctrl+Alt+mouse wheel**, and it receives that wheel input through a
+low-level hook that fires before the game ever sees it. If the game were also
+allowed to see the wheel, that same scroll would additionally scroll whatever
+menu is open. FreeCursor blocks the wheel from reaching the game the entire
+time the cursor is detached, so Magnifier zoom works cleanly - the trade-off
+is that **you cannot scroll a menu with the wheel while detached**. Reattach
+first if you need to scroll. Detaching is meant for reading, not navigating.
+
+**You can't get stranded.** If you detach and then a loading screen, cutscene,
+braindance, or photo mode starts - or your session ends back to the main
+menu - FreeCursor reattaches automatically. You never need to remember to
+reattach before those moments.
+
+## Troubleshooting
+
+**The hotkey does nothing at all.**
+1. Check that you actually bound it - see Install above. Without a binding,
+   there is nothing to press.
+2. Check the CET console/log for a line like:
+   `[FreeCursor] RED4ext plugin not found or incomplete (missing: ...)`.
+   That means `FreeCursor.dll` isn't installed, didn't load, or RED4ext
+   couldn't find it - reinstall the native plugin at
+   `red4ext/plugins/FreeCursor/FreeCursor.dll` and confirm RED4ext itself is
+   installed and loading (check `red4ext/logs/`).
+3. **Check your game version.** The plugin only declares support for patch
+   2.31 (`3.0.80.51928`). If your game has updated past that, RED4ext will
+   silently skip loading the plugin - no error dialog, no crash, it just
+   isn't there. This is the most common way the mod appears to "do nothing."
+   Check `red4ext/logs/` for FreeCursor's own log entries; if there are none
+   at all for this session, the plugin never loaded.
+
+**The cursor won't reattach, or the camera won't hold still.**
+FreeCursor is built to fail toward "stuck attached, in control" rather than
+"stuck detached, input eaten." If a reattach can't be confirmed, it keeps
+retrying automatically on every hotkey press and every context change - press
+the hotkey again. If the RED4ext plugin becomes unable to reach the game
+(for example after an unexpected patch mid-session), the hotkey stops being
+able to detach for the rest of that session; the CET console will keep
+reporting the failure so it isn't silent, but there's currently no
+in-session fix beyond restarting.
+
+**I opened the CET overlay while detached and the overlay's mouse is dead.**
+While you are detached during normal gameplay, mouse input is being swallowed
+before the game sees it, and the hook order between FreeCursor and CET is
+undetermined - so opening the CET overlay in that state may leave the overlay
+itself unable to see the mouse. CET also suppresses mod hotkeys while its
+overlay is open, so pressing the toggle key will not help until the overlay is
+closed. **The way out is the keyboard:** close the overlay with the keyboard
+(the same key you opened it with, default `~`), then press your FreeCursor
+toggle hotkey to reattach. FreeCursor never swallows keyboard input - that is
+deliberate, and it is why this escape route always works.
+
+**Where to look for logs.** RED4ext plugin messages (address resolution,
+native call failures) go to RED4ext's own log output under `red4ext/logs/`.
+Lua-side messages (missing plugin, per-toggle failures) print to CET's
+console/log inside the CET overlay.
+
+## Out of scope
+
+There is no in-game settings panel, no configurable default keybind, no
+controller support, and no direct integration with Windows Magnifier beyond
+freeing the OS pointer for it to follow. Magnifier itself is entirely up to
+you to run and configure.
+
+---
+
+## For developers: building from source
+
+### RED4ext plugin
+
+From `red4ext/plugins/FreeCursor/` in this repo:
+
+```
+"C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" -B build
+"C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" --build build --config Release
+```
+
+Output: `build/Release/FreeCursor.dll`. CMake fetches the pinned RED4ext SDK
+commit automatically via `FetchContent`.
+
+### Lua state-machine tests
+
+The state machine in `state.lua` is pure Lua with no CET/game dependencies,
+so it's tested standalone with LuaJIT. From `tests/` in this repo:
+
+```
+C:\Users\ringo\AppData\Local\Programs\LuaJIT\bin\luajit.exe test_state.lua
+```
+
+Assertions cover detach/reattach in gameplay and menus, refusal in blocked
+contexts, toggling while already detached in a blocked context, crossing
+between gameplay and menus while detached, and auto-reattach on entering a
+blocked context.
+
+### How it works, briefly
+
+Three independent RED4ext RTTI globals, called from `init.lua`:
+
+| Native | Effect |
+|---|---|
+| `FreeCursor_SetCursorForced(Bool) -> Bool` | frees/re-locks the OS pointer via the game's own `ForceCursor` |
+| `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input at the window level (gameplay only) |
+| `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows just the mouse wheel (whenever detached, gameplay and menus alike) |
+
+`state.lua` is a pure, unit-tested decision function with no engine
+dependencies; `init.lua` is the only file that touches CET/game APIs, wiring
+the hotkey and `GameUI.Observe` context changes to those three natives. See
+`docs/superpowers/specs/2026-08-26-freecursor-design.md` in this repo for the
+full design rationale.
