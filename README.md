@@ -61,8 +61,9 @@ import/zip it for Vortex rather than copying files into the game install
 directly - a manual copy will get clobbered on Vortex's next deployment.
 
 `stage-mod.ps1` in the sibling `cp2077-tooling` repo does the filtering for
-you: run it from this repo's root and it copies `bin/` and `red4ext/` into
-`dist/cp2077-freecursor`, dropping `src/`, `build/` and `CMakeLists.txt`. It
+you: run `pwsh -File ..\cp2077-tooling\stage-mod.ps1 -Name FreeCursor` from
+this repo's root and it copies `bin/` and `red4ext/` into `dist/FreeCursor`,
+dropping `src/`, `build/` and `CMakeLists.txt`. It
 stages source only, so copy the built `FreeCursor.dll` into the staged
 `red4ext/plugins/FreeCursor/` yourself before zipping.
 
