@@ -21,3 +21,13 @@ target_link_libraries(FreeCursor PRIVATE RED4ext::SDK)
 target_compile_definitions(FreeCursor PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
 
 set_target_properties(FreeCursor PROPERTIES OUTPUT_NAME "FreeCursor" SUFFIX ".dll")
+
+# Ship debug symbols with the optimised build. Without a PDB, a crash dump that
+# names FreeCursor.dll gives only a raw offset, which is unusable for diagnosis.
+# /Zi does not change codegen; /OPT:REF,ICF restores the size folding that
+# linking with /DEBUG would otherwise turn off.
+target_compile_options(FreeCursor PRIVATE $<$<CONFIG:Release>:/Zi>)
+target_link_options(FreeCursor PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF /MAP>)
+
+# The .map turns a crash-dump offset into a function name with nothing but a
+# text search, so a dump stays readable even where the .pdb has been lost.
