@@ -1,8 +1,18 @@
 # FreeCursor - in-game acceptance checklist
 
-Nothing below has been verified in-game yet. The earlier spike only proved that
-the OS pointer can be freed at all; the hotkey, input swallowing, wheel
-blocking, auto-reattach and the failure paths have **zero** in-game evidence.
+**Result, 2026-08-31: every item below passed**, on build 65,536-byte
+FreeCursor.dll (pre-symbols), across roughly 45 minutes of play. That
+includes the two steps that could have sent code back for changes:
+**step 4**, the refcount probe, and **step 9**, the fall-through UI states.
+`ForceCursor` sets rather than counts, and the fall-through states needed no
+fix. Re-run this list after any change to the plugin.
+
+A separate matter, not a FreeCursor finding: the session ended in a game
+crash while loading a save in the netrunner shop (quest `sq_q001_tbug`,
+objective `01_equip_ping`, Kabuki), which recurred on reload. FreeCursor was
+loaded but never armed in the crashing session - its log holds only
+`FreeCursor loaded` and no `ForceCursor` lines. Attribution is open; the
+sibling `cp2077-tooling` repo's README covers reading the crash dump.
 
 Run in **borderless windowed**, with the CET console open, and check
 `red4ext/logs/` afterwards.
@@ -16,6 +26,10 @@ out by this mod without also being able to press the key that undoes it.
 ## 1. Install and load
 
 - [ ] Import `dist/FreeCursor-0.1.0.zip` through Vortex and deploy.
+      **Reimport whenever the DLL is rebuilt**, and confirm the deployed
+      `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
+      size and hash. A crash dump resolved against a `.map` from a different
+      build names the wrong function and reads entirely plausible.
 - [ ] Launch, bind the hotkey in CET's Bindings tab (**there is no default
       binding** - the mod does nothing until you set one), load a save.
 - [ ] `red4ext/logs/` contains `FreeCursor loaded`.
