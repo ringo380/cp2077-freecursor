@@ -1,11 +1,22 @@
 # FreeCursor - in-game acceptance checklist
 
-**Result, 2026-08-31: every item below passed**, on build 65,536-byte
-FreeCursor.dll (pre-symbols), across roughly 45 minutes of play. That
-includes the two steps that could have sent code back for changes:
+**0.2.0 (2026-09-01): needs a re-run.** The raw-input fix changes what the
+hook swallows, so **step 3b is new and is the point of this build**; steps 3,
+5 and 7 also touch the changed code. Confirm the deployed DLL is the new one
+before starting: it must contain the string `GetRawInputData` (the 0.1.0 DLL
+does not, and is the **same byte size**, so size proves nothing).
+
+**Result, 2026-08-31 (0.1.0): every item below passed**, on build
+65,536-byte FreeCursor.dll (pre-symbols), across roughly 45 minutes of play.
+That includes the two steps that could have sent code back for changes:
 **step 4**, the refcount probe, and **step 9**, the fall-through UI states.
 `ForceCursor` sets rather than counts, and the fall-through states needed no
 fix. Re-run this list after any change to the plugin.
+
+The 0.1.0 run also surfaced the bug 0.2.0 fixes: with the cursor detached in
+gameplay, **no key did anything** - dialogue choices could not be picked - and
+the wheel still scrolled the texting UI. Cause: the game reads input through
+Raw Input, and the hook swallowed every `WM_INPUT`, keyboard included.
 
 A separate matter, not a FreeCursor finding: the session ended in a game
 crash while loading a save in the netrunner shop (quest `sq_q001_tbug`,
@@ -25,13 +36,13 @@ out by this mod without also being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.1.0.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.2.0.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
-      size and hash. A crash dump resolved against a `.map` from a different
+      hash (not size). A crash dump resolved against a `.map` from a different
       build names the wrong function and reads entirely plausible.
-- [ ] Launch, bind the hotkey in CET's Bindings tab (**there is no default
-      binding** - the mod does nothing until you set one), load a save.
+- [ ] Launch, bind the hotkey in CET's Bindings tab to **`;`** (**there is no
+      default binding** - the mod does nothing until you set one), load a save.
 - [ ] `red4ext/logs/` contains `FreeCursor loaded`.
 - [ ] The CET console does **not** show `RED4ext plugin not found`.
 
@@ -50,6 +61,20 @@ the mod correctly refusing to half-work, not a failure. Note whether it happens.
 - [ ] **The camera does not move.**
 - [ ] Press again: pointer re-locks, camera responds normally.
 
+## 3b. Keyboard while detached in gameplay - the 0.2.0 fix
+
+All with the cursor detached during normal play (not in a menu):
+
+- [ ] Walk up to an NPC conversation with choices. **Up/Down** moves the
+      highlight, **Enter** (or `F`) picks it. Try a direct pick too (`R`, `1`).
+- [ ] A **timed** choice: aim Magnifier at the options, read them, pick one
+      with the keys before the timer runs out. This is the use case.
+- [ ] **Hold `T`** for half a second: the phone opens. (A tap is the
+      answer/notification key, not the phone - hold is correct.)
+- [ ] `I` opens the inventory; `Esc` opens the pause menu.
+- [ ] Throughout: **the camera never moves**, even while pressing keys and
+      nudging the mouse.
+
 ## 4. Refcount probe - the most important unverified assumption
 
 - [ ] Detach in gameplay.
@@ -63,8 +88,10 @@ that needs a fix. This is the single highest-value check here.
 ## 5. Menu / phone detach
 
 - [ ] Open the phone, detach.
-- [ ] Clicks work.
-- [ ] The wheel does **not** scroll the menu.
+- [ ] Clicks work. Keys work (arrows move through contacts/messages).
+- [ ] The wheel does **not** scroll the menu. **Check the texting thread
+      specifically** - in 0.1.0 it still scrolled there, because the game reads
+      the wheel from the raw-input stream.
 - [ ] **Ctrl+Alt+wheel still zooms Magnifier - check this inside a menu
       specifically**, not just in gameplay.
 - [ ] Reattach.

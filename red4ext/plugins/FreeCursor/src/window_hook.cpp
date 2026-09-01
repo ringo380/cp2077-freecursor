@@ -17,12 +17,11 @@ std::atomic<bool> g_installed{false};
 std::atomic<bool> g_shouldStop{false};
 std::thread       g_pollThread;
 
-bool IsMouseMessage(UINT aMsg)
+bool IsLegacyMouseMessage(UINT aMsg)
 {
-    // WM_INPUT carries raw mouse motion, which is what actually drives the
-    // camera. Keyboard is deliberately never swallowed, so the toggle key
-    // always gets back out.
-    return (aMsg >= WM_MOUSEFIRST && aMsg <= WM_MOUSELAST) || aMsg == WM_INPUT;
+    // Keyboard messages (WM_KEYDOWN etc.) never fall in this range, so the
+    // legacy path never touches them. Raw input is handled separately below.
+    return aMsg >= WM_MOUSEFIRST && aMsg <= WM_MOUSELAST;
 }
 
 bool IsWheelMessage(UINT aMsg)
@@ -30,25 +29,74 @@ bool IsWheelMessage(UINT aMsg)
     return aMsg == WM_MOUSEWHEEL || aMsg == WM_MOUSEHWHEEL;
 }
 
-LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM alParam)
+// The game reads its input through Raw Input (Cyberpunk2077.exe imports
+// RegisterRawInputDevices/GetRawInputData), and a WM_INPUT message carries raw
+// KEYBOARD events as well as raw mouse motion. Swallowing every WM_INPUT
+// therefore eats keyboard too -- which is exactly why dialog choices, the
+// phone hold-key and every other key went dead in gameplay while detached.
+// Decide per packet instead: mouse packets follow the swallow/wheel flags,
+// keyboard and HID packets always pass through. The pure decision is split
+// out so the truth table can be read on its own.
+bool ShouldSwallowRawInput(DWORD aType, USHORT aButtonFlags, bool aSwallow, bool aWheelBlock)
 {
-    // Two independent flags: SetSwallow covers the full mouse range (which
-    // already includes the wheel), SetWheelBlock covers only the wheel. A
-    // message is swallowed if either flag says so. Keyboard messages never
-    // match either check, so the toggle key always reaches the game.
-    if (g_swallow.load(std::memory_order_relaxed) && IsMouseMessage(auMsg))
-    {
-        // MSDN requires an application that handles WM_INPUT to pass it to
-        // DefWindowProc so the raw-input buffer is cleaned up. The game still
-        // never sees it -- which is the whole point of swallowing it -- but we
-        // must not simply drop it on the floor.
-        if (auMsg == WM_INPUT)
-            return DefWindowProc(ahWnd, auMsg, awParam, alParam);
+    if (aType != RIM_TYPEMOUSE)
+        return false; // keyboard / HID: never ours to eat
 
-        return 1; // consumed: the game never sees it
+    if (aSwallow)
+        return true; // gameplay: camera must hold still
+
+    // Menu mode: the game's wheel comes from the raw stream, not just
+    // WM_MOUSEWHEEL, so block it here too or Ctrl+Alt+wheel Magnifier zoom
+    // also scrolls the texting UI underneath.
+    return aWheelBlock && (aButtonFlags & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) != 0;
+}
+
+bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
+{
+    RAWINPUT raw{};
+    UINT     size = sizeof(raw);
+    const UINT got = GetRawInputData(reinterpret_cast<HRAWINPUT>(alParam), RID_INPUT, &raw, &size,
+                                     sizeof(RAWINPUTHEADER));
+    if (got == static_cast<UINT>(-1) || got < sizeof(RAWINPUTHEADER))
+    {
+        // Unreadable packet. While swallowing, keep the "camera never moves
+        // while detached" guarantee and eat it; otherwise let it through.
+        return aSwallow;
     }
 
-    if (g_wheelBlock.load(std::memory_order_relaxed) && IsWheelMessage(auMsg))
+    // HID packets are variable-length and may not fit a plain RAWINPUT; they
+    // never reach the mouse branch anyway (the header is all we read for them).
+    const USHORT buttonFlags = raw.header.dwType == RIM_TYPEMOUSE ? raw.data.mouse.usButtonFlags : 0;
+    return ShouldSwallowRawInput(raw.header.dwType, buttonFlags, aSwallow, aWheelBlock);
+}
+
+LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM alParam)
+{
+    const bool swallow    = g_swallow.load(std::memory_order_relaxed);
+    const bool wheelBlock = g_wheelBlock.load(std::memory_order_relaxed);
+
+    if (auMsg == WM_INPUT)
+    {
+        if ((swallow || wheelBlock) && ShouldSwallowWmInput(alParam, swallow, wheelBlock))
+        {
+            // MSDN requires an application that handles WM_INPUT to pass it to
+            // DefWindowProc so the raw-input buffer is cleaned up. The game
+            // still never sees it -- which is the whole point of swallowing it
+            // -- but we must not simply drop it on the floor.
+            return DefWindowProc(ahWnd, auMsg, awParam, alParam);
+        }
+        return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
+    }
+
+    // Legacy mouse messages. Two independent flags: SetSwallow covers the full
+    // mouse range (which already includes the wheel), SetWheelBlock covers only
+    // the wheel. A message is swallowed if either flag says so. Keyboard
+    // messages never match either check, so the toggle key always reaches the
+    // game.
+    if (swallow && IsLegacyMouseMessage(auMsg))
+        return 1; // consumed: the game never sees it
+
+    if (wheelBlock && IsWheelMessage(auMsg))
         return 1; // consumed: blocks game scroll/zoom while cursor is detached
 
     return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);

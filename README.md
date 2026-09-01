@@ -69,8 +69,11 @@ stages source only, so copy the built `FreeCursor.dll` into the staged
 
 **After installing, you must bind the hotkey yourself:** open CET's overlay
 (default `~`), go to **Bindings**, find **"Toggle free cursor"** under the
-FreeCursor mod, and assign a key. There is no default binding - until you set
-one, the mod loads but the hotkey does nothing.
+FreeCursor mod, and assign a key. **Semicolon (`;`) is the recommended
+binding** - it is unused by the game and sits under the right hand. CET
+cannot ship a default binding (its hotkey API has no such parameter, and
+bindings live in CET's own `bindings.json`), so until you set one the mod
+loads but the hotkey does nothing.
 
 ## Usage
 
@@ -85,6 +88,14 @@ screen:
 | Loading, a scene, braindance, photo mode, or the main menu (no active session) | detach is refused | unchanged |
 
 The game keeps running in real time while detached - nothing pauses.
+
+**The keyboard always works while detached, in every context.** Only mouse
+input is ever swallowed. So during normal gameplay you can still pick a
+dialogue choice with **Up/Down + Enter** (or `F`, or the direct-pick keys
+`F`/`R`/`1`/`2`), **hold `T`** for half a second to open the phone, open the
+inventory with `I`, and so on - the camera stays still while you read the
+options through Magnifier, and the keys still land. Timed dialogue choices
+are the case this is for.
 
 **Known limitation: the mouse wheel is blocked in every context while
 detached, including menus.** This is deliberate, not a bug: Magnifier zooms
@@ -191,6 +202,14 @@ Three independent RED4ext RTTI globals, called from `init.lua`:
 | `FreeCursor_SetCursorForced(Bool) -> Bool` | frees/re-locks the OS pointer via the game's own `ForceCursor` |
 | `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input at the window level (gameplay only) |
 | `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows just the mouse wheel (whenever detached, gameplay and menus alike) |
+
+The game reads input through Win32 Raw Input, so a `WM_INPUT` message can
+carry a keyboard event as well as mouse motion. The hook reads each raw
+packet's type and only ever swallows `RIM_TYPEMOUSE` packets; keyboard and
+HID packets always pass through. The wheel block likewise checks the raw
+packet's `RI_MOUSE_WHEEL` flag, not just `WM_MOUSEWHEEL` - the texting UI
+scrolls from the raw stream, so blocking the legacy message alone was not
+enough.
 
 `state.lua` is a pure, unit-tested decision function with no engine
 dependencies; `init.lua` is the only file that touches CET/game APIs, wiring
