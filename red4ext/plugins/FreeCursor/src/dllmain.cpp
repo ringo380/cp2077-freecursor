@@ -208,7 +208,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name    = L"FreeCursor";
     aInfo->author  = L"ringo";
-    aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
+    aInfo->version = RED4EXT_V1_SEMVER(0, 3, 1);
     aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_2_31;
     aInfo->sdk     = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

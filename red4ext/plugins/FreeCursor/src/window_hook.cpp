@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdarg>
 #include <cstdio>
 #include <cwchar>
 #include <thread>
@@ -17,6 +18,38 @@ std::atomic<bool> g_wheelBlock{false};
 std::atomic<bool> g_installed{false};
 std::atomic<bool> g_shouldStop{false};
 std::thread       g_pollThread;
+freecursor::WindowHook::LogFn g_log = nullptr;
+
+void Logf(const char* aFmt, ...)
+{
+    if (!g_log)
+        return;
+    char    line[256];
+    va_list args;
+    va_start(args, aFmt);
+    std::vsnprintf(line, sizeof(line), aFmt, args);
+    va_end(args);
+    g_log(line);
+}
+
+// Diagnostic: window activation and focus traffic, with the flags as they
+// stood when the message arrived. These are rare messages (alt-tab, click-in,
+// overlay open), so this cannot spam the log; it is what makes an alt-tab
+// timeline readable after the fact.
+void LogFocusMessage(UINT aMsg, WPARAM awParam, bool aSwallow, bool aWheelBlock)
+{
+    const char* name = nullptr;
+    switch (aMsg)
+    {
+    case WM_ACTIVATE:    name = "WM_ACTIVATE";    break;
+    case WM_ACTIVATEAPP: name = "WM_ACTIVATEAPP"; break;
+    case WM_SETFOCUS:    name = "WM_SETFOCUS";    break;
+    case WM_KILLFOCUS:   name = "WM_KILLFOCUS";   break;
+    default:             return;
+    }
+    Logf("%s wParam=%llu swallow=%d wheelBlock=%d", name, static_cast<unsigned long long>(awParam),
+         aSwallow ? 1 : 0, aWheelBlock ? 1 : 0);
+}
 
 bool IsLegacyMouseMessage(UINT aMsg)
 {
@@ -127,6 +160,8 @@ LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM al
     const bool swallow    = g_swallow.load(std::memory_order_relaxed);
     const bool wheelBlock = g_wheelBlock.load(std::memory_order_relaxed);
 
+    LogFocusMessage(auMsg, awParam, swallow, wheelBlock);
+
     if (auMsg == WM_INPUT)
     {
         if ((swallow || wheelBlock) && ShouldSwallowWmInput(alParam, swallow, wheelBlock))
@@ -185,6 +220,7 @@ BOOL CALLBACK EnumWindowsProc(HWND ahWnd, LPARAM alParam)
 
 void freecursor::WindowHook::Install(LogFn aLog)
 {
+    g_log = aLog;
     g_shouldStop.store(false, std::memory_order_release);
 
     g_pollThread = std::thread(
@@ -264,7 +300,8 @@ bool freecursor::WindowHook::SetSwallow(bool aEnabled)
     // clears for the same reason in reverse - once packets flow again, a
     // release the game never saw the press for is simply ignored by it.
     g_swallowedDowns.store(0, std::memory_order_release);
-    g_swallow.store(aEnabled, std::memory_order_release);
+    if (g_swallow.exchange(aEnabled, std::memory_order_acq_rel) != aEnabled)
+        Logf("swallow -> %d", aEnabled ? 1 : 0);
     return true;
 }
 
@@ -273,6 +310,7 @@ bool freecursor::WindowHook::SetWheelBlock(bool aEnabled)
     if (!g_installed.load(std::memory_order_acquire))
         return false;
 
-    g_wheelBlock.store(aEnabled, std::memory_order_release);
+    if (g_wheelBlock.exchange(aEnabled, std::memory_order_acq_rel) != aEnabled)
+        Logf("wheelBlock -> %d", aEnabled ? 1 : 0);
     return true;
 }
