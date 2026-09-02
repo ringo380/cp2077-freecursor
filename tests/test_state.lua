@@ -118,6 +118,65 @@ check("attached stays attached", a.detached, false)
 check("attached no cursor", a.cursor, false)
 check("attached no wheel", a.wheel, false)
 
+-- Automatic detach (0.4.0). The trigger rising while attached detaches and
+-- marks the detach as auto-owned; falling reattaches.
+s = state.new()
+a = state.setAuto(s, true, MENU)
+check("auto detach cursor", a.cursor, true)
+check("auto detach swallow", a.swallow, false)
+check("auto detach detached", a.detached, true)
+check("auto detach owner", s.auto, true)
+a = state.setAuto(s, false, GAMEPLAY)
+check("auto reattach cursor", a.cursor, false)
+check("auto reattach detached", a.detached, false)
+check("auto reattach owner", s.auto, false)
+
+-- A manual detach outlives the trigger: the phone opening and closing
+-- around a hand-detached cursor changes nothing.
+s = state.new()
+state.toggle(s, GAMEPLAY)
+a = state.setAuto(s, true, MENU)
+check("manual then auto rise detached", a.detached, true)
+check("manual then auto rise owner", s.auto, false)
+a = state.setAuto(s, false, GAMEPLAY)
+check("manual then auto fall detached", a.detached, true)
+check("manual then auto fall cursor", a.cursor, true)
+check("manual then auto fall swallow", a.swallow, true)
+
+-- The hotkey inside an auto detach reattaches AND takes ownership, so the
+-- trigger ending later is a no-op rather than a second reattach.
+s = state.new()
+state.setAuto(s, true, MENU)
+a = state.toggle(s, MENU)
+check("hotkey inside auto cursor", a.cursor, false)
+check("hotkey inside auto detached", a.detached, false)
+check("hotkey inside auto owner", s.auto, false)
+a = state.setAuto(s, false, GAMEPLAY)
+check("trigger end after hotkey detached", a.detached, false)
+check("trigger end after hotkey cursor", a.cursor, false)
+
+-- Steady state is a plain re-evaluation: wanted stays true across a
+-- gameplay/menu crossing and swallow follows the context.
+s = state.new()
+state.setAuto(s, true, MENU)
+a = state.setAuto(s, true, GAMEPLAY)
+check("auto steady cursor", a.cursor, true)
+check("auto steady swallow", a.swallow, true)
+check("auto steady owner", s.auto, true)
+
+-- A blocked context never starts an auto detach, and ends one.
+s = state.new()
+a = state.setAuto(s, true, BLOCKED)
+check("auto in blocked detached", a.detached, false)
+check("auto in blocked owner", s.auto, false)
+s = state.new()
+state.setAuto(s, true, MENU)
+a = state.setAuto(s, true, BLOCKED)
+check("auto crossing to blocked detached", a.detached, false)
+check("auto crossing to blocked owner", s.auto, false)
+a = state.setAuto(s, false, GAMEPLAY)
+check("auto fall after blocked detached", a.detached, false)
+
 if failures == 0 then
   print("ok - all state tests passed")
   os.exit(0)

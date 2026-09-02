@@ -1,5 +1,14 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.4.0 (2026-09-02): settings menu and automatic detach - step 12 is new.**
+Lua-only change; the DLL is rebuilt only for the version string. Confirm the
+deployed `init.lua` contains `registerSettingsUi` and the RED4ext log
+reports version 0.4.0.
+
+**0.3.1 result (2026-09-02):** reported as working well across a play
+session; the alt-tab stuck-detach from 0.3.0 was not seen again. It is not
+reproducible on demand, so the focus/flag logging stays in.
+
 **0.3.0 (2026-09-01): needs a re-run.** Two changes on top of 0.2.0: a raw
 button release whose press was not swallowed is now forwarded (the stuck
 hotkey - **step 3c is the repro, and the point of this build**), and the
@@ -172,6 +181,30 @@ matters. Your answers decide the fix.
 - [ ] CET `/reload` while detached. Cursor and swallow should clear themselves
       **immediately**, with no keypress needed.
 - [ ] Exit the game while detached. Pointer is normal on the desktop.
+
+## 12. Settings menu and automatic detach - new in 0.4.0
+
+- [ ] Open Mod Configuration Menu (or Settings > Mods). A **FreeCursor** tab
+      exists with an **Automatic detach** section and two switches, both off.
+- [ ] Turn on **Detach in the phone**. Close the menu, hold `T`: the cursor
+      frees itself within a moment of the phone opening. Clicks and the wheel
+      work in the thread. Close the phone: the cursor locks and the camera
+      responds. Repeat three times.
+- [ ] Manual wins: detach with `;` first, then open and close the phone. The
+      cursor stays free the whole time; `;` reattaches.
+- [ ] Hotkey inside: let the phone detach you, press `;` while it is open
+      (locks), then close the phone. Nothing further happens.
+- [ ] Turn on **Detach in menus**. Open the inventory: cursor frees. Close it:
+      cursor locks. Open the map, then the journal, then the pause menu -
+      each frees on entry and locks on exit. Open the phone from a menu and
+      back: no flicker, still detached until both are closed.
+- [ ] Turn a switch off while its trigger is active (phone open, or in the
+      menu itself). The cursor locks immediately.
+- [ ] Quit to desktop and relaunch: both switches are as you left them
+      (`settings.json` in the mod folder holds them).
+- [ ] With **Detach in the phone** on, an incoming call during gameplay must
+      not free the cursor unless the messenger actually opens. Note what
+      happens; a call is a phone state but not a reading task.
 
 ## 11. Logs
 

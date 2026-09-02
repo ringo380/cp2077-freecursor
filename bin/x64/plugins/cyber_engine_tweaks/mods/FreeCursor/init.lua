@@ -17,7 +17,42 @@ local state = require("state")
 -- is forced down the teardown path regardless of what state.lua's decide()
 -- computes, so a stuck cursor can never cause swallow/wheel to be silently
 -- re-armed behind the player's back. See teardown()/apply() below.
-local mod = { s = state.new(), ready = false, recovering = false }
+local mod = { s = state.new(), ready = false, recovering = false, phoneOpen = false }
+
+-- User settings, persisted to settings.json in this mod's folder (CET's io
+-- sandbox roots relative paths there). Every option defaults off so a fresh
+-- install behaves exactly like 0.3.x until the player opts in.
+local SETTINGS_FILE = "settings.json"
+local settings = { autoPhone = false, autoMenu = false }
+
+local function loadSettings()
+  local f = io.open(SETTINGS_FILE, "r")
+  if not f then return end
+  local text = f:read("*a")
+  f:close()
+  local ok, data = pcall(json.decode, text)
+  if not ok or type(data) ~= "table" then
+    print("[FreeCursor] settings.json is unreadable; using defaults.")
+    return
+  end
+  for key, default in pairs(settings) do
+    if type(data[key]) == type(default) then
+      settings[key] = data[key]
+    end
+  end
+end
+
+local function saveSettings()
+  local ok, text = pcall(json.encode, settings)
+  if not ok then return end
+  local f = io.open(SETTINGS_FILE, "w")
+  if not f then
+    print("[FreeCursor] Could not write settings.json; the change applies to this session only.")
+    return
+  end
+  f:write(text)
+  f:close()
+end
 
 -- GameUI.IsDetached() means "no active game session" (e.g. at the main menu
 -- before loading a save) -- a naming collision with this mod's own notion of
@@ -127,7 +162,91 @@ local function apply(action)
   end
 end
 
+-- True while any enabled automatic trigger holds. The menu half comes from
+-- GameUI; the phone half from the PhoneSystem poll below, because the
+-- messenger overlay is not a menu to GameUI (it never raises IsInMenu).
+local function autoWanted(ctx)
+  return (settings.autoMenu and ctx.isMenu) or (settings.autoPhone and mod.phoneOpen)
+end
+
+-- Single re-evaluation point for every non-hotkey event: context changes,
+-- phone open/close, and a setting being flipped. state.setAuto degrades to
+-- a plain onContextChange when nothing about the trigger changed.
+local function reevaluate()
+  if not mod.ready then return end
+  local ctx = context()
+  apply(state.setAuto(mod.s, autoWanted(ctx), ctx))
+end
+
+-- PhoneSystem.IsPhoneOpened() is the base game's own "messenger is up"
+-- state - a plain read, no UI-controller lifecycle guessing. Guarded so a
+-- game patch that renames it degrades to "phone never open" instead of a
+-- per-frame error. Polled, not observed: cheap, and the only cost of the
+-- 100 ms cadence is that an auto detach lands up to a tenth of a second late.
+local function phoneIsOpen()
+  local open
+  pcall(function()
+    local ps = Game.GetScriptableSystemsContainer():Get("PhoneSystem")
+    if ps then open = ps:IsPhoneOpened() end
+  end)
+  return open == true
+end
+
+local PHONE_POLL_SECONDS = 0.1
+local phonePollElapsed = 0
+
+registerForEvent("onUpdate", function(delta)
+  if not mod.ready or not settings.autoPhone then return end
+  phonePollElapsed = phonePollElapsed + (delta or 0)
+  if phonePollElapsed < PHONE_POLL_SECONDS then return end
+  phonePollElapsed = 0
+  local open = phoneIsOpen()
+  if open ~= mod.phoneOpen then
+    mod.phoneOpen = open
+    reevaluate()
+  end
+end)
+
+-- Register the settings tab with nativeSettings. Mod Configuration Menu
+-- (MCM) aggregates nativeSettings registrations through its CET bridge, so
+-- this one registration surfaces in both MCM and the vanilla Settings > Mods
+-- page. nativeSettings does not persist anything itself - the callbacks
+-- write settings.json.
+local function registerSettingsUi()
+  local ns = GetMod("nativeSettings")
+  if not ns then
+    print("[FreeCursor] nativeSettings not installed; settings menu unavailable, using settings.json as-is.")
+    return
+  end
+
+  local tab = "/FreeCursor"
+  local sub = tab .. "/auto"
+  if not ns.pathExists(tab) then
+    ns.addTab(tab, "FreeCursor")
+  end
+  ns.addSubcategory(sub, "Automatic detach")
+
+  ns.addSwitch(sub, "Detach in the phone",
+    "Free the cursor automatically when the phone or messenger opens, and lock it again when it closes. A detach you started with the hotkey is left alone.",
+    settings.autoPhone, false, function(value)
+      settings.autoPhone = value
+      saveSettings()
+      if not value then mod.phoneOpen = false end
+      reevaluate()
+    end)
+
+  ns.addSwitch(sub, "Detach in menus",
+    "Free the cursor automatically in the inventory, map, journal, pause menu, vendors, stash and other full-screen menus, and lock it again on leaving. A detach you started with the hotkey is left alone.",
+    settings.autoMenu, false, function(value)
+      settings.autoMenu = value
+      saveSettings()
+      reevaluate()
+    end)
+end
+
 registerForEvent("onInit", function()
+  loadSettings()
+
   -- Partial-install check: the natives are RTTI globals registered by the
   -- RED4ext plugin. If any is missing, the plugin either isn't installed,
   -- didn't load for this game version, or a hook failed -- report plainly
@@ -162,17 +281,15 @@ registerForEvent("onInit", function()
   Game.FreeCursor_SetCursorForced(false)
 
   mod.ready = true
+  registerSettingsUi()
 
   -- Route every UI-context change through the same decision function used
   -- by the hotkey, so that: entering a blocked context (loading, scene,
   -- braindance, photo mode, no session) while detached auto-reattaches all
   -- three natives; crossing gameplay<->menu while detached keeps the cursor
   -- free and only re-evaluates swallow, with wheel staying true throughout.
-  GameUI.Observe(function()
-    if mod.ready then
-      apply(state.onContextChange(mod.s, context()))
-    end
-  end)
+  -- The same callback carries the "detach in menus" trigger via reevaluate.
+  GameUI.Observe(reevaluate)
 end)
 
 -- registerHotkey callbacks only fire while the CET overlay is closed -- this

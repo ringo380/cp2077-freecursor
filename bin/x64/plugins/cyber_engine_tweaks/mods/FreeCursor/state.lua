@@ -22,8 +22,11 @@ local function attached()
   return { cursor = false, swallow = false, detached = false, refused = false, wheel = false }
 end
 
+-- `auto` records that the current detach was started by an automatic trigger
+-- (phone opened, menu entered) rather than the hotkey. Only an auto detach is
+-- ever undone automatically; a manual detach outlives the trigger.
 function state.new()
-  return { detached = false }
+  return { detached = false, auto = false }
 end
 
 -- Given the desired intent and the current context, produce the action to apply.
@@ -36,6 +39,7 @@ function state.decide(self, ctx)
   -- detached cursor: auto-reattach rather than strand the player.
   if ctx.isBlocked then
     self.detached = false
+    self.auto = false
     return attached()
   end
 
@@ -60,11 +64,30 @@ function state.toggle(self, ctx)
     return action
   end
 
+  -- A hotkey press always takes ownership: reattaching cancels a pending
+  -- auto-reattach, and detaching by hand is never undone by a trigger ending.
   self.detached = not self.detached
+  self.auto = false
   return state.decide(self, ctx)
 end
 
 function state.onContextChange(self, ctx)
+  return state.decide(self, ctx)
+end
+
+-- Automatic trigger: `wanted` is true while any enabled auto-detach
+-- condition holds (phone open, menu open). Rising edge detaches only if the
+-- cursor is attached; falling edge reattaches only if the detach was ours.
+-- Everything else is a plain context re-evaluation, identical to
+-- onContextChange, so this can be the single entry point for both.
+function state.setAuto(self, wanted, ctx)
+  if wanted and not self.detached and not ctx.isBlocked then
+    self.detached = true
+    self.auto = true
+  elseif not wanted and self.auto then
+    self.detached = false
+    self.auto = false
+  end
   return state.decide(self, ctx)
 end
 

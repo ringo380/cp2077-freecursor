@@ -26,9 +26,11 @@ to read, without pausing the game, opening a menu, or leaving your session.
   Windows Magnifier itself. Magnifier is still a separate, user-driven tool -
   turn it on however you normally do (e.g. Win + `+`). FreeCursor only makes
   sure the OS pointer is free to move once Magnifier is following it.
-- There is no settings menu, no configurable keybind default, and no
-  controller support. The hotkey must be bound by hand (below) before the mod
-  does anything.
+- Optionally, it can detach **automatically** when the phone opens or when
+  you enter a menu, and reattach when you leave - see Settings below. Both
+  options are off by default.
+- There is no configurable keybind default and no controller support. The
+  hotkey must be bound by hand (below) before the mod does anything.
 
 ## Requirements
 
@@ -112,6 +114,29 @@ braindance, or photo mode starts - or your session ends back to the main
 menu - FreeCursor reattaches automatically. You never need to remember to
 reattach before those moments.
 
+## Settings
+
+FreeCursor registers a **FreeCursor** tab with Native Settings UI, so it
+shows up in **Mod Configuration Menu (MCM)** if you use it, and under the
+vanilla **Settings > Mods** page either way. If Native Settings UI is not
+installed, the mod still runs with whatever is in `settings.json` (defaults
+if the file is absent) and prints one line to the CET console saying so.
+
+Two switches, both **off** by default:
+
+- **Detach in the phone** - the cursor frees itself when the phone or
+  messenger opens and locks again when it closes.
+- **Detach in menus** - the same for the inventory, map, journal, pause menu,
+  vendors, stash and other full-screen menus.
+
+An automatic detach only ever undoes itself. If you detached with the hotkey
+before the phone opened, closing the phone leaves you detached. If the phone
+detached you and you press the hotkey while it is open, you reattach and the
+phone closing later does nothing. Dialogue choices happen during gameplay,
+not in a menu, so they stay hotkey-only.
+
+Settings persist in `settings.json` next to `init.lua`.
+
 ## Troubleshooting
 
 **The hotkey does nothing at all.**
@@ -167,10 +192,9 @@ console/log inside the CET overlay.
 
 ## Out of scope
 
-There is no in-game settings panel, no configurable default keybind, no
-controller support, and no direct integration with Windows Magnifier beyond
-freeing the OS pointer for it to follow. Magnifier itself is entirely up to
-you to run and configure.
+There is no configurable default keybind, no controller support, and no
+direct integration with Windows Magnifier beyond freeing the OS pointer for
+it to follow. Magnifier itself is entirely up to you to run and configure.
 
 ---
 
@@ -229,6 +253,11 @@ never swallows a button release whose press it did not also swallow.
 
 `state.lua` is a pure, unit-tested decision function with no engine
 dependencies; `init.lua` is the only file that touches CET/game APIs, wiring
-the hotkey and `GameUI.Observe` context changes to those three natives. See
+the hotkey, `GameUI.Observe` context changes, the phone poll and the settings
+switches to those three natives. The phone is not a menu to GameUI (the
+messenger overlay never raises the game's in-menu flag), so "detach in the
+phone" polls the base game's `PhoneSystem.IsPhoneOpened()` ten times a
+second while that option is on. Auto-detach ownership (`auto` in
+`state.lua`) is what stops a trigger ending from undoing a manual detach. See
 `docs/superpowers/specs/2026-08-26-freecursor-design.md` in this repo for the
 full design rationale.
