@@ -202,9 +202,11 @@ matters. Your answers decide the fix.
       menu itself). The cursor locks immediately.
 - [ ] Quit to desktop and relaunch: both switches are as you left them
       (`settings.json` in the mod folder holds them).
-- [ ] With **Detach in the phone** on, an incoming call during gameplay must
-      not free the cursor unless the messenger actually opens. Note what
-      happens; a call is a phone state but not a reading task.
+- [ ] With **Detach in the phone** on, take an incoming call during
+      gameplay. The cursor must **not** free: a call keeps you in first
+      person with full control, and the trigger requires the game to have
+      left the default context. Open the messenger after hanging up: it
+      detaches as normal.
 
 ## 11. Logs
 

@@ -165,8 +165,16 @@ end
 -- True while any enabled automatic trigger holds. The menu half comes from
 -- GameUI; the phone half from the PhoneSystem poll below, because the
 -- messenger overlay is not a menu to GameUI (it never raises IsInMenu).
+--
+-- The phone half also requires the game to have left the default gameplay
+-- context. A phone CALL keeps the player in first person with full control,
+-- which is the default context by definition, and is not a reading task -
+-- so whatever IsPhoneOpened reports during a call, a call never detaches.
+-- The messenger proper takes a non-default context (that is why clicks and
+-- keys already reached it before any of this existed).
 local function autoWanted(ctx)
-  return (settings.autoMenu and ctx.isMenu) or (settings.autoPhone and mod.phoneOpen)
+  return (settings.autoMenu and ctx.isMenu)
+      or (settings.autoPhone and mod.phoneOpen and not ctx.isDefault)
 end
 
 -- Single re-evaluation point for every non-hotkey event: context changes,

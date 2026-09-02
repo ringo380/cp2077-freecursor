@@ -125,7 +125,9 @@ if the file is absent) and prints one line to the CET console saying so.
 Two switches, both **off** by default:
 
 - **Detach in the phone** - the cursor frees itself when the phone or
-  messenger opens and locks again when it closes.
+  messenger opens and locks again when it closes. A phone call does not
+  count: you keep full first-person control during a call, so nothing
+  detaches.
 - **Detach in menus** - the same for the inventory, map, journal, pause menu,
   vendors, stash and other full-screen menus.
 
@@ -257,7 +259,9 @@ the hotkey, `GameUI.Observe` context changes, the phone poll and the settings
 switches to those three natives. The phone is not a menu to GameUI (the
 messenger overlay never raises the game's in-menu flag), so "detach in the
 phone" polls the base game's `PhoneSystem.IsPhoneOpened()` ten times a
-second while that option is on. Auto-detach ownership (`auto` in
+second while that option is on, and only counts it once GameUI reports a
+non-default context, which excludes phone calls (full control, default
+context). Auto-detach ownership (`auto` in
 `state.lua`) is what stops a trigger ending from undoing a manual detach. See
 `docs/superpowers/specs/2026-08-26-freecursor-design.md` in this repo for the
 full design rationale.
