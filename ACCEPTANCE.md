@@ -5,6 +5,10 @@ Lua-only change; the DLL is rebuilt only for the version string. Confirm the
 deployed `init.lua` contains `registerSettingsUi` and the RED4ext log
 reports version 0.4.0.
 
+**0.4.0 partial result (2026-09-02):** most steps re-run and passing,
+including the settings menu and automatic detach; the remaining steps need
+further play to reach their triggers. Not yet a full pass.
+
 **0.3.1 result (2026-09-02):** reported as working well across a play
 session; the alt-tab stuck-detach from 0.3.0 was not seen again. It is not
 reproducible on demand, so the focus/flag logging stays in.
@@ -58,7 +62,7 @@ out by this mod without also being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.3.0.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.4.0.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
