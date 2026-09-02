@@ -2,9 +2,13 @@
 
 namespace freecursor::WindowHook
 {
+using LogFn = void (*)(const char* aMessage);
+
 // Starts a background thread that polls for the CP2077 window and subclasses it.
-// Safe to call once, at plugin load.
-void Install();
+// Safe to call once, at plugin load. aLog (may be null) receives one line once
+// the hook is in place, naming the module that owned the WndProc we displaced
+// - which is how a log tells whether we hooked ahead of or behind CET.
+void Install(LogFn aLog);
 
 // Restores the original WNDPROC. Safe to call even if Install() never completed.
 // Clears both flags so a reload never leaves input eaten.
@@ -19,11 +23,12 @@ void Uninstall();
 bool SetSwallow(bool aEnabled);
 
 // Arms/disarms blocking of the wheel alone: WM_MOUSEWHEEL/WM_MOUSEHWHEEL and
-// raw mouse packets carrying RI_MOUSE_WHEEL/HWHEEL. Intended to be armed
-// whenever the cursor is detached (gameplay AND menu/phone mode), so the game
-// never scrolls in response to Ctrl+Alt+wheel Magnifier zoom. Independent of
-// SetSwallow - either flag may be on without the other; a message is swallowed
-// if either flag says to swallow it. Returns false if the hook is not
-// installed yet, in which case the flag is NOT applied.
+// raw mouse packets carrying RI_MOUSE_WHEEL/HWHEEL - but only while Ctrl+Alt
+// are held, i.e. only the Windows Magnifier zoom gesture. A plain wheel always
+// reaches the game, in both modes, because a wheel packet carries no motion
+// and cannot move the camera. Intended to be armed whenever the cursor is
+// detached (gameplay AND menu/phone mode). Independent of SetSwallow.
+// Returns false if the hook is not installed yet, in which case the flag is
+// NOT applied.
 bool SetWheelBlock(bool aEnabled);
 } // namespace freecursor::WindowHook

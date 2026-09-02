@@ -188,7 +188,12 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
         s_handle = aHandle;
         aSdk->logger->Info(aHandle, "FreeCursor loaded");
         RED4ext::CRTTISystem::Get()->AddPostRegisterCallback(PostRegisterTypes);
-        freecursor::WindowHook::Install();
+        freecursor::WindowHook::Install(
+            [](const char* aMessage)
+            {
+                if (s_sdk)
+                    s_sdk->logger->Info(s_handle, aMessage);
+            });
         break;
 
     case RED4ext::v1::EMainReason::Unload:
@@ -203,7 +208,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name    = L"FreeCursor";
     aInfo->author  = L"ringo";
-    aInfo->version = RED4EXT_V1_SEMVER(0, 2, 0);
+    aInfo->version = RED4EXT_V1_SEMVER(0, 3, 0);
     aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_2_31;
     aInfo->sdk     = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

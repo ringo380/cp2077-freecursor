@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cwchar>
 #include <thread>
 
@@ -37,18 +38,66 @@ bool IsWheelMessage(UINT aMsg)
 // Decide per packet instead: mouse packets follow the swallow/wheel flags,
 // keyboard and HID packets always pass through. The pure decision is split
 // out so the truth table can be read on its own.
-bool ShouldSwallowRawInput(DWORD aType, USHORT aButtonFlags, bool aSwallow, bool aWheelBlock)
+constexpr USHORT kRawWheelFlags = RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL;
+// The five button DOWN flags occupy the even bits; each UP flag is the next
+// bit up, so `up >> 1` lines up with the matching DOWN bit.
+constexpr USHORT kRawButtonDownFlags = RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_DOWN |
+                                       RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_BUTTON_4_DOWN |
+                                       RI_MOUSE_BUTTON_5_DOWN;
+constexpr USHORT kRawButtonUpFlags = kRawButtonDownFlags << 1;
+
+// Buttons whose raw DOWN packet we swallowed and whose UP the game/CET
+// therefore must not see either (see PassesSwallowedButtonUp). Only touched
+// from the window thread; cleared whenever swallow is disarmed.
+std::atomic<USHORT> g_swallowedDowns{0};
+
+// Windows Magnifier zooms on Ctrl+Alt+wheel. A wheel packet carries no motion,
+// so it can never move the camera; the only reason to eat it is to stop the
+// game scrolling/zooming underneath a Magnifier zoom gesture. Everything else
+// (weapon cycling, scrolling a texting thread) is wanted.
+bool CtrlAltHeld()
+{
+    return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 && (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+}
+
+bool ShouldSwallowRawInput(DWORD aType, USHORT aButtonFlags, bool aSwallow, bool aWheelBlock, bool aCtrlAlt)
 {
     if (aType != RIM_TYPEMOUSE)
         return false; // keyboard / HID: never ours to eat
 
-    if (aSwallow)
-        return true; // gameplay: camera must hold still
+    // The game's wheel comes from the raw stream, not just WM_MOUSEWHEEL, so
+    // decide it here. Wheel packets are decided BEFORE the swallow check: they
+    // cannot move the camera, and while detached the player still wants plain
+    // scrolling to reach the game.
+    if (aButtonFlags & kRawWheelFlags)
+        return aWheelBlock && aCtrlAlt;
 
-    // Menu mode: the game's wheel comes from the raw stream, not just
-    // WM_MOUSEWHEEL, so block it here too or Ctrl+Alt+wheel Magnifier zoom
-    // also scrolls the texting UI underneath.
-    return aWheelBlock && (aButtonFlags & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) != 0;
+    return aSwallow; // gameplay: camera must hold still
+}
+
+// CET reads its hotkeys from this same raw stream, fires them on key UP, and
+// matches the whole set of keys it believes are held - mouse buttons included.
+// If CET saw a button go down (before swallow was armed, say RMB held to aim
+// while pressing the toggle) and we then ate the UP, CET thinks the button is
+// still held, every later press is a combo, and neither the toggle nor CET's
+// own overlay key matches anything until CET happens to see that button
+// released. Whether this bites depends on which of us hooked the window last,
+// which is a launch-time race. So: a raw UP whose DOWN we did not swallow is
+// always passed through. A stray release is harmless to the game; a missing
+// one is a stuck hotkey. Returns true if the packet must pass for that reason.
+bool PassesSwallowedButtonUp(USHORT aButtonFlags)
+{
+    const USHORT downs = static_cast<USHORT>(aButtonFlags & kRawButtonDownFlags);
+    const USHORT ups   = static_cast<USHORT>(aButtonFlags & kRawButtonUpFlags);
+    USHORT       seen  = g_swallowedDowns.load(std::memory_order_relaxed);
+
+    const bool mustPass = (static_cast<USHORT>(ups >> 1) & ~seen) != 0;
+    if (mustPass)
+        return true;
+
+    seen = static_cast<USHORT>((seen | downs) & ~static_cast<USHORT>(ups >> 1));
+    g_swallowedDowns.store(seen, std::memory_order_relaxed);
+    return false;
 }
 
 bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
@@ -67,7 +116,10 @@ bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
     // HID packets are variable-length and may not fit a plain RAWINPUT; they
     // never reach the mouse branch anyway (the header is all we read for them).
     const USHORT buttonFlags = raw.header.dwType == RIM_TYPEMOUSE ? raw.data.mouse.usButtonFlags : 0;
-    return ShouldSwallowRawInput(raw.header.dwType, buttonFlags, aSwallow, aWheelBlock);
+    if (!ShouldSwallowRawInput(raw.header.dwType, buttonFlags, aSwallow, aWheelBlock, CtrlAltHeld()))
+        return false;
+
+    return !PassesSwallowedButtonUp(buttonFlags);
 }
 
 LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM alParam)
@@ -89,15 +141,15 @@ LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM al
     }
 
     // Legacy mouse messages. Two independent flags: SetSwallow covers the full
-    // mouse range (which already includes the wheel), SetWheelBlock covers only
-    // the wheel. A message is swallowed if either flag says so. Keyboard
-    // messages never match either check, so the toggle key always reaches the
-    // game.
+    // mouse range, SetWheelBlock covers only the wheel. The wheel is decided
+    // first, with the same rule as the raw path: eaten only while both flags
+    // agree it is a Magnifier zoom gesture. Keyboard messages never match
+    // either check, so the toggle key always reaches the game.
+    if (IsWheelMessage(auMsg))
+        return (wheelBlock && CtrlAltHeld()) ? 1 : CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
+
     if (swallow && IsLegacyMouseMessage(auMsg))
         return 1; // consumed: the game never sees it
-
-    if (wheelBlock && IsWheelMessage(auMsg))
-        return 1; // consumed: blocks game scroll/zoom while cursor is detached
 
     return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
 }
@@ -131,12 +183,12 @@ BOOL CALLBACK EnumWindowsProc(HWND ahWnd, LPARAM alParam)
 }
 } // namespace
 
-void freecursor::WindowHook::Install()
+void freecursor::WindowHook::Install(LogFn aLog)
 {
     g_shouldStop.store(false, std::memory_order_release);
 
     g_pollThread = std::thread(
-        []
+        [aLog]
         {
             HWND found = nullptr;
             while (!found && !g_shouldStop.load(std::memory_order_relaxed))
@@ -154,6 +206,33 @@ void freecursor::WindowHook::Install()
             g_originalProc = reinterpret_cast<WNDPROC>(
                 SetWindowLongPtr(found, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HookedWndProc)));
             g_installed.store(true, std::memory_order_release);
+
+            // CET subclasses this same window from its own 50 ms poll, so who
+            // sees input first is a per-launch race. Record which module the
+            // procedure we displaced belongs to: cyber_engine_tweaks.asi means
+            // we are AHEAD of CET (it only sees what we forward);
+            // Cyberpunk2077.exe means CET had not hooked yet and will end up
+            // ahead of us. This line is what lets a log settle the question.
+            if (aLog)
+            {
+                char    line[512];
+                HMODULE owner = nullptr;
+                wchar_t path[MAX_PATH] = {};
+                if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       reinterpret_cast<LPCWSTR>(g_originalProc), &owner) &&
+                    GetModuleFileNameW(owner, path, MAX_PATH) != 0)
+                {
+                    const wchar_t* base = std::wcsrchr(path, L'\\');
+                    base                = base ? base + 1 : path;
+                    std::snprintf(line, sizeof(line), "Window hook installed; previous WndProc belongs to %ls", base);
+                }
+                else
+                {
+                    std::snprintf(line, sizeof(line), "Window hook installed; previous WndProc owner unknown");
+                }
+                aLog(line);
+            }
         });
 }
 
@@ -172,6 +251,7 @@ void freecursor::WindowHook::Uninstall()
     g_installed.store(false, std::memory_order_release);
     g_swallow.store(false, std::memory_order_release);
     g_wheelBlock.store(false, std::memory_order_release);
+    g_swallowedDowns.store(0, std::memory_order_release);
 }
 
 bool freecursor::WindowHook::SetSwallow(bool aEnabled)
@@ -179,6 +259,11 @@ bool freecursor::WindowHook::SetSwallow(bool aEnabled)
     if (!g_installed.load(std::memory_order_acquire))
         return false;
 
+    // A fresh arm starts with no swallowed downs: any button held right now
+    // went down in the clear, so its release must be forwarded. Disarming
+    // clears for the same reason in reverse - once packets flow again, a
+    // release the game never saw the press for is simply ignored by it.
+    g_swallowedDowns.store(0, std::memory_order_release);
     g_swallow.store(aEnabled, std::memory_order_release);
     return true;
 }

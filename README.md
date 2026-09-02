@@ -84,7 +84,7 @@ screen:
 | Context | Cursor | Mouse input to the game |
 |---|---|---|
 | Normal gameplay | freed | swallowed - your camera holds still while you read |
-| Menu or phone/texting UI | freed | passes through normally (clicks work) - **except the mouse wheel** |
+| Menu or phone/texting UI | freed | passes through normally (clicks and wheel work) |
 | Loading, a scene, braindance, photo mode, or the main menu (no active session) | detach is refused | unchanged |
 
 The game keeps running in real time while detached - nothing pauses.
@@ -97,15 +97,15 @@ inventory with `I`, and so on - the camera stays still while you read the
 options through Magnifier, and the keys still land. Timed dialogue choices
 are the case this is for.
 
-**Known limitation: the mouse wheel is blocked in every context while
-detached, including menus.** This is deliberate, not a bug: Magnifier zooms
-with **Ctrl+Alt+mouse wheel**, and it receives that wheel input through a
-low-level hook that fires before the game ever sees it. If the game were also
-allowed to see the wheel, that same scroll would additionally scroll whatever
-menu is open. FreeCursor blocks the wheel from reaching the game the entire
-time the cursor is detached, so Magnifier zoom works cleanly - the trade-off
-is that **you cannot scroll a menu with the wheel while detached**. Reattach
-first if you need to scroll. Detaching is meant for reading, not navigating.
+**The mouse wheel: plain scrolling works, Ctrl+Alt+wheel is Magnifier's.**
+Magnifier zooms with **Ctrl+Alt+mouse wheel**, and it receives that wheel
+input through a low-level hook that fires before the game ever sees it. If
+the game were also allowed to see it, the same gesture would scroll or zoom
+whatever is on screen underneath. So while detached, FreeCursor eats the
+wheel from the game **only while Ctrl and Alt are both held**. A plain wheel
+reaches the game as normal in every context - it scrolls a texting thread,
+cycles weapons - and never moves the camera, because a wheel event carries
+no motion.
 
 **You can't get stranded.** If you detach and then a loading screen, cutscene,
 braindance, or photo mode starts - or your session ends back to the main
@@ -150,6 +150,15 @@ closed. **The way out is the keyboard:** close the overlay with the keyboard
 (the same key you opened it with, default `~`), then press your FreeCursor
 toggle hotkey to reattach. FreeCursor never swallows keyboard input - that is
 deliberate, and it is why this escape route always works.
+
+**The hotkey stops toggling, and CET's overlay key goes dead too.** CET reads
+its hotkeys from the same raw-input stream FreeCursor filters, fires them on
+key release, and matches against every key it believes is held - mouse
+buttons included. Versions before 0.3.0 could eat a button release CET was
+waiting for (hold right-click to aim, press the toggle, let go), after which
+every keypress looked like a combo to CET. 0.3.0 forwards any release whose
+press it did not swallow. If it ever recurs: alt-tab out and back (CET resets
+its key state on focus loss), or click once inside any menu.
 
 **Where to look for logs.** RED4ext plugin messages (address resolution,
 native call failures) go to RED4ext's own log output under `red4ext/logs/`.
@@ -201,7 +210,7 @@ Three independent RED4ext RTTI globals, called from `init.lua`:
 |---|---|
 | `FreeCursor_SetCursorForced(Bool) -> Bool` | frees/re-locks the OS pointer via the game's own `ForceCursor` |
 | `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input at the window level (gameplay only) |
-| `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows just the mouse wheel (whenever detached, gameplay and menus alike) |
+| `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows the mouse wheel while Ctrl+Alt are held (whenever detached, gameplay and menus alike) |
 
 The game reads input through Win32 Raw Input, so a `WM_INPUT` message can
 carry a keyboard event as well as mouse motion. The hook reads each raw
@@ -210,6 +219,13 @@ HID packets always pass through. The wheel block likewise checks the raw
 packet's `RI_MOUSE_WHEEL` flag, not just `WM_MOUSEWHEEL` - the texting UI
 scrolls from the raw stream, so blocking the legacy message alone was not
 enough.
+
+CET hooks the same window with the same 50 ms `EnumWindows` poll, so which of
+the two sees input first is a per-launch race; the RED4ext log line
+`Window hook installed; previous WndProc belongs to <module>` records the
+outcome (`cyber_engine_tweaks.asi` = FreeCursor is ahead of CET). Because CET
+takes its hotkeys from raw input and matches the full held-key set, the hook
+never swallows a button release whose press it did not also swallow.
 
 `state.lua` is a pure, unit-tested decision function with no engine
 dependencies; `init.lua` is the only file that touches CET/game APIs, wiring

@@ -8,7 +8,8 @@
 --   wheel    -> Game.FreeCursor_SetWheelBlock(Bool)   (whenever detached,
 --               gameplay and menu alike -- see addendum: Ctrl+Alt+wheel
 --               drives Windows Magnifier zoom and must not also scroll the
---               game, even though other mouse input passes through in menus)
+--               game. The native only eats the wheel while Ctrl+Alt are
+--               held; a plain wheel always reaches the game.)
 --   detached -> mirrors self.detached, handed back for the caller's own state
 --   refused  -> true only when a detach attempt was rejected outright
 --               (blocked context); everything else is left unchanged

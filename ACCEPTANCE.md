@@ -1,10 +1,23 @@
 # FreeCursor - in-game acceptance checklist
 
-**0.2.0 (2026-09-01): needs a re-run.** The raw-input fix changes what the
-hook swallows, so **step 3b is new and is the point of this build**; steps 3,
-5 and 7 also touch the changed code. Confirm the deployed DLL is the new one
-before starting: it must contain the string `GetRawInputData` (the 0.1.0 DLL
-does not, and is the **same byte size**, so size proves nothing).
+**0.3.0 (2026-09-01): needs a re-run.** Two changes on top of 0.2.0: a raw
+button release whose press was not swallowed is now forwarded (the stuck
+hotkey - **step 3c is the repro, and the point of this build**), and the
+wheel now reaches the game unless Ctrl+Alt are held (step 5). Confirm the
+deployed DLL is the new one first: it must contain the string
+`previous WndProc belongs to` (0.2.0 does not).
+
+**0.2.0 result (2026-09-01):** step 3b passed - keys work while detached, hold-T
+opens the phone. Step 5's wheel check passed. New finding: after detaching
+with right-click held, `;` stopped toggling and CET's overlay key went dead
+until a right-click inside a menu. Log showed no `ForceCursor(false)` for the
+whole stuck period, i.e. the Lua callback never ran. Root cause is in CET's
+hotkey matcher (raw-input, key-up, full held-set match) plus a swallowed
+button release; fixed in 0.3.0.
+
+**0.2.0 build note:** the raw-input fix changes what the hook swallows, so
+**step 3b was new in 0.2.0**. That DLL contains the string `GetRawInputData`
+(0.1.0 does not, and is the **same byte size**, so size proves nothing).
 
 **Result, 2026-08-31 (0.1.0): every item below passed**, on build
 65,536-byte FreeCursor.dll (pre-symbols), across roughly 45 minutes of play.
@@ -36,14 +49,18 @@ out by this mod without also being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.2.0.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.3.0.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
       build names the wrong function and reads entirely plausible.
 - [ ] Launch, bind the hotkey in CET's Bindings tab to **`;`** (**there is no
       default binding** - the mod does nothing until you set one), load a save.
-- [ ] `red4ext/logs/` contains `FreeCursor loaded`.
+- [ ] `red4ext/logs/` contains `FreeCursor loaded` and, a moment later,
+      `Window hook installed; previous WndProc belongs to <module>`. Note the
+      module: `cyber_engine_tweaks.asi` means FreeCursor is ahead of CET this
+      launch (the order that exposed the stuck-hotkey bug);
+      `Cyberpunk2077.exe` means CET is ahead. It varies per launch.
 - [ ] The CET console does **not** show `RED4ext plugin not found`.
 
 ## 2. The startup race
@@ -75,6 +92,21 @@ All with the cursor detached during normal play (not in a menu):
 - [ ] Throughout: **the camera never moves**, even while pressing keys and
       nudging the mouse.
 
+## 3c. Toggle with a mouse button held - the 0.3.0 fix
+
+Reproduced on 0.2.0 at 19:54 on 2026-09-01: detached with RMB held, stuck for
+two minutes until a right-click inside a menu. Run it on a launch where the
+log says `previous WndProc belongs to cyber_engine_tweaks.asi`; on the other
+order it never reproduced and passing proves less.
+
+- [ ] In gameplay, attached: **hold right-click** (aim), press `;`, release
+      right-click. Press `;` again. It must reattach, immediately.
+- [ ] Same with **left-click** held, and with the **middle button** held.
+- [ ] Detach with nothing held, then click left and right a few times while
+      detached (the game must not react - clicks are still swallowed in
+      gameplay), then press `;`. It must reattach.
+- [ ] CET's overlay key still opens the overlay after each of the above.
+
 ## 4. Refcount probe - the most important unverified assumption
 
 - [ ] Detach in gameplay.
@@ -89,11 +121,12 @@ that needs a fix. This is the single highest-value check here.
 
 - [ ] Open the phone, detach.
 - [ ] Clicks work. Keys work (arrows move through contacts/messages).
-- [ ] The wheel does **not** scroll the menu. **Check the texting thread
-      specifically** - in 0.1.0 it still scrolled there, because the game reads
-      the wheel from the raw-input stream.
-- [ ] **Ctrl+Alt+wheel still zooms Magnifier - check this inside a menu
-      specifically**, not just in gameplay.
+- [ ] A **plain wheel scrolls the texting thread** (0.3.0: the wheel reaches
+      the game unless Ctrl+Alt are held).
+- [ ] **Ctrl+Alt+wheel zooms Magnifier and does NOT scroll the thread** -
+      check this inside the texting thread specifically, not just in gameplay.
+- [ ] In gameplay, detached: plain wheel cycles weapons as normal;
+      Ctrl+Alt+wheel zooms Magnifier only. Camera never moves either way.
 - [ ] Reattach.
 
 ## 6. Clicking after crossing into a menu
