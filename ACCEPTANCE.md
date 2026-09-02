@@ -1,5 +1,11 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.5.0 (2026-09-02): Ctrl and Alt held back from the game while detached
+in gameplay - step 13 is new.** Native change. Import
+`dist/FreeCursor-0.5.0.zip`, confirm the deployed DLL hash matches the
+staged one, and that the RED4ext log reports version 0.5.0. Steps 3, 3b,
+3c and 5 are the regression set for this build.
+
 **0.4.0 (2026-09-02): settings menu and automatic detach - step 12 is new.**
 Lua-only change; the DLL is rebuilt only for the version string. Confirm the
 deployed `init.lua` contains `registerSettingsUi` and the RED4ext log
@@ -54,15 +60,17 @@ sibling `cp2077-tooling` repo's README covers reading the crash dump.
 Run in **borderless windowed**, with the CET console open, and check
 `red4ext/logs/` afterwards.
 
-**Escape hatch, before you start:** keyboard input is never swallowed. Esc and
-the toggle hotkey always reach the game, in every state. You cannot get locked
-out by this mod without also being able to press the key that undoes it.
+**Escape hatch, before you start:** keyboard input is never swallowed, apart
+from Ctrl and Alt while detached in gameplay (0.5.0). Esc and the toggle
+hotkey always reach the game, in every state, as long as the toggle is not a
+Ctrl or Alt combination. You cannot get locked out by this mod without also
+being able to press the key that undoes it.
 
 ---
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.4.0.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.5.0.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
@@ -211,6 +219,24 @@ matters. Your answers decide the fix.
       person with full control, and the trigger requires the game to have
       left the default context. Open the messenger after hanging up: it
       detaches as normal.
+
+## 13. Ctrl and Alt while detached in gameplay - new in 0.5.0
+
+All in normal gameplay, standing, with the cursor detached via `;`:
+
+- [ ] Tap and hold **Ctrl** alone. V does not crouch or dodge.
+- [ ] Tap **Alt** alone. No item switch.
+- [ ] **Ctrl+Alt+wheel**: Magnifier zooms, nothing happens in game.
+- [ ] Release everything, press `;` to reattach. Ctrl now crouches and Alt
+      now switches as normal; nothing is stuck.
+- [ ] Reverse order: **hold Ctrl first** (crouched), press `;` while still
+      holding it, then release Ctrl. V stands up (the release reached the
+      game). Press `;` to reattach.
+- [ ] Detach, hold Ctrl, press `;` to reattach while still holding, then
+      release. No stuck crouch either way.
+- [ ] In a menu, detached: Ctrl and Alt behave exactly as they do attached
+      (menus are not affected by this change).
+- [ ] CET's overlay key still opens the overlay after each of the above.
 
 ## 11. Logs
 

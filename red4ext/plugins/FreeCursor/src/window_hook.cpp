@@ -93,10 +93,64 @@ bool CtrlAltHeld()
     return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 && (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 }
 
+// Ctrl and Alt are the one keyboard exception. Magnifier's zoom gesture is
+// Ctrl+Alt+wheel, and the game binds Ctrl (crouch / dodge) and Alt (switch
+// item) on their own, so the first half of the gesture fires a game action
+// before the wheel ever arrives. While the gameplay swallow is armed, the two
+// modifiers are eaten - every other key still passes, so Esc, the toggle key
+// and dialogue keys keep working. Magnifier is unaffected: it reads the
+// modifiers through its own low-level hook, ahead of this WndProc, and
+// CtrlAltHeld() above reads the async key state for the same reason.
+//
+// Press/release balance follows the mouse-button rule: a release is eaten
+// only when its press was eaten too, so a Ctrl held across the toggle press
+// (game saw the DOWN) still gets its UP, and never leaves a stuck crouch.
+// Left and right keys are tracked separately, and the raw and legacy streams
+// each keep their own mask, since both carry the same physical keystroke.
+constexpr int kModSlotNone = -1;
+
+int ModifierSlot(USHORT aVKey, bool aExtended)
+{
+    switch (aVKey)
+    {
+    case VK_CONTROL:  return aExtended ? 1 : 0;
+    case VK_LCONTROL: return 0;
+    case VK_RCONTROL: return 1;
+    case VK_MENU:     return aExtended ? 3 : 2;
+    case VK_LMENU:    return 2;
+    case VK_RMENU:    return 3;
+    default:          return kModSlotNone;
+    }
+}
+
+std::atomic<unsigned> g_swallowedModsRaw{0};
+std::atomic<unsigned> g_swallowedModsLegacy{0};
+
+// Returns true if this modifier event must be eaten; updates the mask.
+bool SwallowModifierEvent(std::atomic<unsigned>& aMask, int aSlot, bool aIsUp)
+{
+    const unsigned bit  = 1u << aSlot;
+    unsigned       seen = aMask.load(std::memory_order_relaxed);
+    if (aIsUp)
+    {
+        if ((seen & bit) == 0)
+            return false; // press went to the game, so must the release
+        aMask.store(seen & ~bit, std::memory_order_relaxed);
+        return true;
+    }
+    aMask.store(seen | bit, std::memory_order_relaxed);
+    return true;
+}
+
+bool IsLegacyKeyMessage(UINT aMsg)
+{
+    return aMsg == WM_KEYDOWN || aMsg == WM_KEYUP || aMsg == WM_SYSKEYDOWN || aMsg == WM_SYSKEYUP;
+}
+
 bool ShouldSwallowRawInput(DWORD aType, USHORT aButtonFlags, bool aSwallow, bool aWheelBlock, bool aCtrlAlt)
 {
     if (aType != RIM_TYPEMOUSE)
-        return false; // keyboard / HID: never ours to eat
+        return false; // keyboard / HID: decided elsewhere (modifiers) or never eaten
 
     // The game's wheel comes from the raw stream, not just WM_MOUSEWHEEL, so
     // decide it here. Wheel packets are decided BEFORE the swallow check: they
@@ -146,6 +200,16 @@ bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
         return aSwallow;
     }
 
+    if (raw.header.dwType == RIM_TYPEKEYBOARD)
+    {
+        if (!aSwallow)
+            return false;
+        const int slot = ModifierSlot(raw.data.keyboard.VKey, (raw.data.keyboard.Flags & RI_KEY_E0) != 0);
+        if (slot == kModSlotNone)
+            return false;
+        return SwallowModifierEvent(g_swallowedModsRaw, slot, (raw.data.keyboard.Flags & RI_KEY_BREAK) != 0);
+    }
+
     // HID packets are variable-length and may not fit a plain RAWINPUT; they
     // never reach the mouse branch anyway (the header is all we read for them).
     const USHORT buttonFlags = raw.header.dwType == RIM_TYPEMOUSE ? raw.data.mouse.usButtonFlags : 0;
@@ -175,11 +239,22 @@ LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM al
         return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
     }
 
+    // Legacy Ctrl/Alt key messages, same rule and balance as the raw path.
+    // Returning without DefWindowProc also stops an Alt release turning into
+    // WM_SYSCOMMAND/SC_KEYMENU. No other key message is ever touched.
+    if (swallow && IsLegacyKeyMessage(auMsg))
+    {
+        const int slot = ModifierSlot(static_cast<USHORT>(awParam), (alParam & (1 << 24)) != 0);
+        if (slot != kModSlotNone &&
+            SwallowModifierEvent(g_swallowedModsLegacy, slot, auMsg == WM_KEYUP || auMsg == WM_SYSKEYUP))
+            return 0;
+    }
+
     // Legacy mouse messages. Two independent flags: SetSwallow covers the full
     // mouse range, SetWheelBlock covers only the wheel. The wheel is decided
     // first, with the same rule as the raw path: eaten only while both flags
-    // agree it is a Magnifier zoom gesture. Keyboard messages never match
-    // either check, so the toggle key always reaches the game.
+    // agree it is a Magnifier zoom gesture. Other keyboard messages never
+    // match either check, so the toggle key always reaches the game.
     if (IsWheelMessage(auMsg))
         return (wheelBlock && CtrlAltHeld()) ? 1 : CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
 
@@ -288,6 +363,8 @@ void freecursor::WindowHook::Uninstall()
     g_swallow.store(false, std::memory_order_release);
     g_wheelBlock.store(false, std::memory_order_release);
     g_swallowedDowns.store(0, std::memory_order_release);
+    g_swallowedModsRaw.store(0, std::memory_order_release);
+    g_swallowedModsLegacy.store(0, std::memory_order_release);
 }
 
 bool freecursor::WindowHook::SetSwallow(bool aEnabled)
@@ -300,6 +377,8 @@ bool freecursor::WindowHook::SetSwallow(bool aEnabled)
     // clears for the same reason in reverse - once packets flow again, a
     // release the game never saw the press for is simply ignored by it.
     g_swallowedDowns.store(0, std::memory_order_release);
+    g_swallowedModsRaw.store(0, std::memory_order_release);
+    g_swallowedModsLegacy.store(0, std::memory_order_release);
     if (g_swallow.exchange(aEnabled, std::memory_order_acq_rel) != aEnabled)
         Logf("swallow -> %d", aEnabled ? 1 : 0);
     return true;

@@ -94,7 +94,10 @@ stages source only, so copy the built `FreeCursor.dll` into the staged
 **After installing, you must bind the hotkey yourself:** open CET's overlay
 (default `~`), go to **Bindings**, find **"Toggle free cursor"** under the
 FreeCursor mod, and assign a key. **Semicolon (`;`) is the recommended
-binding** - it is unused by the game and sits under the right hand. CET
+binding** - it is unused by the game and sits under the right hand. Do not
+bind a combination that includes Ctrl or Alt: those two keys are held back
+from the game while detached in gameplay (see Usage), and depending on
+launch order the combination can be held back from CET too. CET
 cannot ship a default binding (its hotkey API has no such parameter, and
 bindings live in CET's own `bindings.json`), so until you set one the mod
 loads but the hotkey does nothing.
@@ -113,8 +116,12 @@ screen:
 
 The game keeps running in real time while detached - nothing pauses.
 
-**The keyboard always works while detached, in every context.** Only mouse
-input is ever swallowed. So during normal gameplay you can still pick a
+**The keyboard always works while detached, in every context**, with one
+exception: **Ctrl and Alt are held back from the game while detached in
+gameplay**, because they are the first half of Magnifier's zoom gesture and
+the game binds Ctrl (crouch or dodge) and Alt (switch item) on their own.
+A press that started before you detached still completes normally, so a
+held crouch never sticks. Every other key passes. So during normal gameplay you can still pick a
 dialogue choice with **Up/Down + Enter** (or `F`, or the direct-pick keys
 `F`/`R`/`1`/`2`), **hold `T`** for half a second to open the phone, open the
 inventory with `I`, and so on - the camera stays still while you read the
@@ -257,13 +264,18 @@ Three independent RED4ext RTTI globals, called from `init.lua`:
 | Native | Effect |
 |---|---|
 | `FreeCursor_SetCursorForced(Bool) -> Bool` | frees/re-locks the OS pointer via the game's own `ForceCursor` |
-| `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input at the window level (gameplay only) |
+| `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input, plus the Ctrl and Alt keys, at the window level (gameplay only) |
 | `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows the mouse wheel while Ctrl+Alt are held (whenever detached, gameplay and menus alike) |
 
 The game reads input through Win32 Raw Input, so a `WM_INPUT` message can
 carry a keyboard event as well as mouse motion. The hook reads each raw
-packet's type and only ever swallows `RIM_TYPEMOUSE` packets; keyboard and
-HID packets always pass through. The wheel block likewise checks the raw
+packet's type and only ever swallows `RIM_TYPEMOUSE` packets, plus keyboard
+packets for the Ctrl and Alt keys while the gameplay swallow is armed; every
+other keyboard and HID packet passes through. A Ctrl or Alt release is eaten
+only when its press was eaten too, the same balance rule the mouse buttons
+use, so a key held across the toggle never gets stuck in the game. Magnifier
+reads those modifiers through its own low-level hook ahead of the window
+procedure, so holding them back from the game does not affect zoom. The wheel block likewise checks the raw
 packet's `RI_MOUSE_WHEEL` flag, not just `WM_MOUSEWHEEL` - the texting UI
 scrolls from the raw stream, so blocking the legacy message alone was not
 enough.
