@@ -6,7 +6,7 @@
 --   cursor   -> Game.FreeCursor_SetCursorForced(Bool)
 --   swallow  -> Game.FreeCursor_SetInputSwallow(Bool) (gameplay only)
 --   wheel    -> Game.FreeCursor_SetWheelBlock(Bool)   (whenever detached,
---               gameplay and menu alike -- see addendum: Ctrl+Alt+wheel
+--               gameplay and menu alike, because Ctrl+Alt+wheel
 --               drives Windows Magnifier zoom and must not also scroll the
 --               game. The native only eats the wheel while Ctrl+Alt are
 --               held; a plain wheel always reaches the game.)

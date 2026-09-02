@@ -16,7 +16,7 @@ local MENU     = { isDefault = false, isMenu = true,  isBlocked = false }
 local BLOCKED  = { isDefault = false, isMenu = false, isBlocked = true  }
 
 -- Detaching in gameplay frees the cursor and swallows mouse input; wheel is
--- also blocked (addendum case 1).
+-- also blocked.
 local s = state.new()
 local a = state.toggle(s, GAMEPLAY)
 check("gameplay detach cursor", a.cursor, true)
@@ -32,8 +32,8 @@ check("gameplay reattach detached", a.detached, false)
 check("gameplay reattach wheel", a.wheel, false)
 
 -- Detaching in a menu frees the cursor but leaves input alone -- except the
--- wheel, which is still blocked (addendum case 2, the case the addendum
--- exists for).
+-- wheel, which is still blocked (the wheel is the reason menu mode is not
+-- simply "leave input alone").
 s = state.new()
 a = state.toggle(s, MENU)
 check("menu detach cursor", a.cursor, true)
@@ -41,14 +41,14 @@ check("menu detach swallow", a.swallow, false)
 check("menu detach detached", a.detached, true)
 check("menu detach wheel", a.wheel, true)
 
--- Toggling again reattaches from menu mode too (addendum case 5, the menu half).
+-- Toggling again reattaches from menu mode too (the menu half of the round trip).
 a = state.toggle(s, MENU)
 check("menu reattach cursor", a.cursor, false)
 check("menu reattach swallow", a.swallow, false)
 check("menu reattach detached", a.detached, false)
 check("menu reattach wheel", a.wheel, false)
 
--- Blocked contexts refuse to detach and change nothing (addendum case 6).
+-- Blocked contexts refuse to detach and change nothing.
 s = state.new()
 a = state.toggle(s, BLOCKED)
 check("blocked refused", a.refused, true)
@@ -58,7 +58,7 @@ check("blocked swallow", a.swallow, false)
 check("blocked wheel", a.wheel, false)
 
 -- Crossing gameplay -> menu while detached keeps the cursor free, drops
--- swallow, and keeps the wheel blocked (addendum case 3).
+-- swallow, and keeps the wheel blocked.
 s = state.new()
 state.toggle(s, GAMEPLAY)
 a = state.onContextChange(s, MENU)
@@ -68,7 +68,7 @@ check("cross to menu detached", a.detached, true)
 check("cross to menu wheel", a.wheel, true)
 
 -- Crossing menu -> gameplay while detached re-engages swallow and keeps the
--- wheel blocked throughout (addendum case 4).
+-- wheel blocked throughout.
 s = state.new()
 state.toggle(s, MENU)
 a = state.onContextChange(s, GAMEPLAY)
@@ -78,7 +78,7 @@ check("cross to gameplay detached", a.detached, true)
 check("cross to gameplay wheel", a.wheel, true)
 
 -- Crossing into a blocked context while detached auto-reattaches, dropping
--- the wheel block too (addendum case 7).
+-- the wheel block too.
 s = state.new()
 state.toggle(s, GAMEPLAY)
 a = state.onContextChange(s, BLOCKED)

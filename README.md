@@ -284,6 +284,13 @@ phone" polls the base game's `PhoneSystem.IsPhoneOpened()` ten times a
 second while that option is on, and only counts it once GameUI reports a
 non-default context, which excludes phone calls (full control, default
 context). Auto-detach ownership (`auto` in
-`state.lua`) is what stops a trigger ending from undoing a manual detach. See
-`docs/superpowers/specs/2026-08-26-freecursor-design.md` in this repo for the
-full design rationale.
+`state.lua`) is what stops a trigger ending from undoing a manual detach.
+
+## License and credits
+
+FreeCursor is released under the MIT License; see `LICENSE`.
+
+`External/GameUI.lua` is the GameUI helper by psiberx (copyright 2021,
+version 1.2.3), vendored unchanged from the copy that ships with other CET
+mods. It is included under its author's terms and is not covered by this
+repository's license.

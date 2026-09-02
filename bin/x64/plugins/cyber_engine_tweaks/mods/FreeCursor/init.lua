@@ -1,11 +1,10 @@
--- FreeCursor CET wiring: joins the RED4ext natives (Task 1/2) with the pure
--- state machine (Task 3, state.lua) via a hotkey and GameUI context
--- observation. This file is the only place that touches CET/game APIs;
+-- FreeCursor CET wiring: joins the RED4ext natives with the pure state
+-- machine (state.lua) via a hotkey and GameUI context observation. This file is the only place that touches CET/game APIs;
 -- state.lua stays pure and untouched.
 --
 -- Vendored dependency: External/GameUI.lua is psiberx's GameUI v1.2.3
 -- (44,157 bytes, SHA-256 A72647FAF49B2CBC...), copied byte-for-byte from
--- AerialTrafficSurge per the task-4 addendum. Do not edit that file here;
+-- the AerialTrafficSurge mod in the game install. Do not edit that file here;
 -- if it needs a change, that's an upstream concern.
 
 local GameUI = require("External/GameUI")
@@ -108,8 +107,8 @@ local function teardown()
 end
 
 -- Apply an action returned by state.lua. All three natives are applied
--- independently (per addendum: never derive one from another, never skip a
--- call because another one was made).
+-- independently: never derive one from another, never skip a call because
+-- another one was made.
 local function apply(action)
   if action.refused then
     print("[FreeCursor] Can't detach the cursor in this context.")
@@ -142,7 +141,7 @@ local function apply(action)
   -- Fail closed, precisely scoped on action.swallow being TRUE. In gameplay the
   -- swallow is what holds the camera still; without it the cursor would be
   -- detached with a live camera following pointer motion, which is exactly the
-  -- state the spec says we must never leave the player in. So roll the cursor
+  -- state the player must never be left in. So roll the cursor
   -- back rather than continue. A menu detach legitimately asks for
   -- swallow = false, and must never be aborted by the same benign false return
   -- (which only ever means "the window hook isn't up yet").
