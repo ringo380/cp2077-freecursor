@@ -62,6 +62,28 @@ If you manage mods with **Vortex**, stage this same layout into a folder and
 import/zip it for Vortex rather than copying files into the game install
 directly - a manual copy will get clobbered on Vortex's next deployment.
 
+**Vortex metadata has to be entered by hand.** Vortex 2.6 populates a mod's
+name, version, author, description and update checks only from Nexus Mods,
+looked up by the archive's MD5. It reads nothing from inside a local
+archive: its FOMOD `info.xml` extractor is disabled in the shipped build,
+and the Cyberpunk extension's `info.json` applies only to REDmod-layout
+mods, which this is not. After importing a FreeCursor zip, open the mod's
+details pane and set:
+
+| Field | Value |
+|---|---|
+| Name | FreeCursor |
+| Version | the number in the zip name, e.g. `0.4.0` |
+| Author | ringo |
+| Description | Frees the Windows mouse pointer on a hotkey so Windows Magnifier can be aimed at on-screen text while the game camera holds still. Optional automatic detach in the phone and in menus. Accessibility mod for players who rely on screen magnification. |
+| Source | Website |
+
+When importing a newer zip, pick **Replace** on the "mod already installed"
+prompt: Vortex then carries the name, category and notes over from the
+previous entry, but **not** the version or description, so re-enter those
+two. Automatic update notifications need the file hosted on Nexus Mods;
+there is no local equivalent.
+
 `stage-mod.ps1` in the sibling `cp2077-tooling` repo does the filtering for
 you: run `pwsh -File ..\cp2077-tooling\stage-mod.ps1 -Name FreeCursor` from
 this repo's root and it copies `bin/` and `red4ext/` into `dist/FreeCursor`,
