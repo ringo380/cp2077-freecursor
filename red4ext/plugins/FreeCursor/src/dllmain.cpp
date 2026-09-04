@@ -2,6 +2,9 @@
 
 #include <Windows.h>
 
+#include <chrono>
+#include <thread>
+
 #include "window_hook.h"
 
 namespace
@@ -61,6 +64,46 @@ ForceCursor_t ResolveForceCursor()
 // no-op, not an underflow. Only ever touched from the script VM thread.
 bool s_cursorForced = false;
 
+// Diagnostic: what the OS pointer is actually doing around a ForceCursor call.
+// The log otherwise records only what the mod asked for, never whether the
+// pointer hid. CURSORINFO is process-wide, so it can be read from any thread;
+// the foreground check says whether the game even owns the pointer right now.
+void LogCursorSample(const char* aWhen)
+{
+    if (!s_sdk)
+        return;
+    CURSORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetCursorInfo(&info))
+    {
+        s_sdk->logger->InfoF(s_handle, "cursor %s: GetCursorInfo failed (%lu)", aWhen, GetLastError());
+        return;
+    }
+    const HWND fg = GetForegroundWindow();
+    DWORD      fgPid = 0;
+    if (fg)
+        GetWindowThreadProcessId(fg, &fgPid);
+    s_sdk->logger->InfoF(s_handle, "cursor %s: showing=%d hCursor=%p pos=(%ld,%ld) gameForeground=%d", aWhen,
+                         (info.flags & CURSOR_SHOWING) ? 1 : 0, static_cast<void*>(info.hCursor),
+                         info.ptScreenPos.x, info.ptScreenPos.y, fgPid == GetCurrentProcessId() ? 1 : 0);
+}
+
+// Two delayed samples after a state change. The game may hide or show the
+// pointer some frames after ForceCursor returns, so a sample taken on the
+// calling thread alone would only ever see the old state.
+void ScheduleCursorSamples(bool aEnabled)
+{
+    std::thread(
+        [aEnabled]
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            LogCursorSample(aEnabled ? "100ms after force(true)" : "100ms after force(false)");
+            std::this_thread::sleep_for(std::chrono::milliseconds(900));
+            LogCursorSample(aEnabled ? "1s after force(true)" : "1s after force(false)");
+        })
+        .detach();
+}
+
 bool ApplyCursorForced(bool aEnabled)
 {
     static ForceCursor_t forceCursor = ResolveForceCursor();
@@ -80,6 +123,7 @@ bool ApplyCursorForced(bool aEnabled)
     if (aEnabled == s_cursorForced)
         return true;
 
+    LogCursorSample(aEnabled ? "before force(true)" : "before force(false)");
     forceCursor(engine->unkD0, kReason, aEnabled);
     // Only after the call actually executed -- a failed apply must not poison
     // the cache.
@@ -87,6 +131,8 @@ bool ApplyCursorForced(bool aEnabled)
 
     if (s_sdk)
         s_sdk->logger->InfoF(s_handle, "ForceCursor(%s) applied", aEnabled ? "true" : "false");
+    LogCursorSample(aEnabled ? "right after force(true)" : "right after force(false)");
+    ScheduleCursorSamples(aEnabled);
 
     return true;
 }
@@ -208,7 +254,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name    = L"FreeCursor";
     aInfo->author  = L"ringo";
-    aInfo->version = RED4EXT_V1_SEMVER(0, 5, 0);
+    aInfo->version = RED4EXT_V1_SEMVER(0, 5, 1);
     aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_2_31;
     aInfo->sdk     = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

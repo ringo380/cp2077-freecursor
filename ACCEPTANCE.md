@@ -1,5 +1,12 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.5.1 (2026-09-03): diagnostic build for the cursor that stays visible
+after reattaching - step 14 is new.** Logging only, no behaviour change.
+Import `dist/FreeCursor-0.5.1.zip`; the RED4ext log must report version
+0.5.1 and show `cursor before force(...)` lines around every ForceCursor
+transition, and the CET console must print `[FreeCursor] hotkey: context=`
+on every press.
+
 **0.5.0 (2026-09-02): Ctrl and Alt held back from the game while detached
 in gameplay - step 13 is new.** Native change. Import
 `dist/FreeCursor-0.5.0.zip`, confirm the deployed DLL hash matches the
@@ -70,7 +77,7 @@ being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.5.0.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.5.1.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
@@ -237,6 +244,27 @@ All in normal gameplay, standing, with the cursor detached via `;`:
 - [ ] In a menu, detached: Ctrl and Alt behave exactly as they do attached
       (menus are not affected by this change).
 - [ ] CET's overlay key still opens the overlay after each of the above.
+
+## 14. Cursor still visible after reattach - diagnostic in 0.5.1
+
+Reported 2026-09-03: the pointer sometimes stays on screen after `;`
+reattaches in gameplay. That day's logs show every reattach released all
+three natives, and every detach began outside GameUI's default context (a
+menu, a vehicle, the scanner or a popup), so the path under suspicion is
+"detach outside gameplay, walk into gameplay, reattach there".
+
+- [ ] On foot, attached: press `;` to detach, `;` again to reattach. Note
+      whether the pointer hides.
+- [ ] In a vehicle: same two presses. Note whether the pointer hides.
+- [ ] Open the inventory, press `;` to detach, close the inventory, press
+      `;` in gameplay. Note whether the pointer hides.
+- [ ] Any time the pointer stays visible: does moving the mouse hide it?
+      Does opening and closing a menu hide it? Note which.
+- [ ] Afterwards, keep the RED4ext log and the CET `scripting.log`. Each
+      `ForceCursor(false) applied` line is bracketed by `cursor before`,
+      `cursor right after`, `100ms after` and `1s after` samples with
+      `showing=` and `gameForeground=`; the CET log names the GameUI context
+      on every press.
 
 ## 11. Logs
 
