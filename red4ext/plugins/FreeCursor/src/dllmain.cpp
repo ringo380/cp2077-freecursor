@@ -37,11 +37,6 @@ struct NameArray
 constexpr std::size_t kForcedReasonsOffset = 0x158;
 constexpr std::size_t kHideReasonsOffset   = 0x168;
 
-// input::InputSystemWin32Base: insert a hide reason (no-op if present) and
-// erase one. Same calling shape as ForceCursor minus the bool.
-using HideCursor_t = void (*)(RED4ext::CBaseEngine::UnkD0*, RED4ext::CName);
-constexpr std::uint32_t kHideCursorHash = 1013978019UL;
-
 constexpr std::size_t kMaxReasons = 8;
 
 // Copy up to kMaxReasons names out of an array. The samples run on a worker
@@ -100,27 +95,6 @@ void DescribeReasons(RED4ext::CBaseEngine::UnkD0* aInput, std::size_t aOffset, c
     put("]");
 }
 
-// The hide reasons seen the last time the pointer was legitimately hidden
-// (hide array non-empty, forced array empty). Recorded on the main thread
-// only, before our own ForceCursor calls; read back by RestoreCursorLock.
-RED4ext::CName s_lastHideReasons[kMaxReasons];
-std::uint32_t  s_lastHideCount = 0;
-
-void RememberHideReasons(RED4ext::CBaseEngine::UnkD0* aInput)
-{
-    RED4ext::CName names[kMaxReasons];
-    std::uint32_t  hideTotal = 0;
-    const auto     n         = CopyReasons(ReasonArray(aInput, kHideReasonsOffset), names, &hideTotal);
-    std::uint32_t  forcedTotal = 0;
-    RED4ext::CName scratch[kMaxReasons];
-    CopyReasons(ReasonArray(aInput, kForcedReasonsOffset), scratch, &forcedTotal);
-    if (n == 0 || forcedTotal != 0)
-        return;
-    for (std::uint32_t i = 0; i < n; ++i)
-        s_lastHideReasons[i] = names[i];
-    s_lastHideCount = n;
-}
-
 // Mirrors RED4ext::UniversalRelocBase::Resolve, but returns nullptr on
 // failure instead of calling ShowErrorAndTerminateProcess. A game patch that
 // shifts the ForceCursor address must make the mod degrade gracefully
@@ -157,11 +131,6 @@ ForceCursor_t ResolveForceCursor()
     return reinterpret_cast<ForceCursor_t>(ResolveGameAddress(kForceCursorHash));
 }
 
-HideCursor_t ResolveHideCursor()
-{
-    return reinterpret_cast<HideCursor_t>(ResolveGameAddress(kHideCursorHash));
-}
-
 // Last value successfully handed to ForceCursor for kReason. The reason
 // parameter is a refcount key, so repeat-arming the same value would push the
 // count up N times and need N disarms -- and GameUI.Observe re-runs apply() on
@@ -196,10 +165,11 @@ void LogCursorSample(const char* aWhen)
         DescribeReasons(engine->unkD0, kForcedReasonsOffset, forced, sizeof(forced));
         DescribeReasons(engine->unkD0, kHideReasonsOffset, hide, sizeof(hide));
     }
-    s_sdk->logger->InfoF(s_handle, "cursor %s: showing=%d hCursor=%p pos=(%ld,%ld) gameForeground=%d forced=%s hide=%s",
+    s_sdk->logger->InfoF(s_handle,
+                         "cursor %s: showing=%d hCursor=%p pos=(%ld,%ld) gameForeground=%d capture=%p forced=%s hide=%s",
                          aWhen, (info.flags & CURSOR_SHOWING) ? 1 : 0, static_cast<void*>(info.hCursor),
-                         info.ptScreenPos.x, info.ptScreenPos.y, fgPid == GetCurrentProcessId() ? 1 : 0, forced,
-                         hide);
+                         info.ptScreenPos.x, info.ptScreenPos.y, fgPid == GetCurrentProcessId() ? 1 : 0,
+                         static_cast<void*>(GetCapture()), forced, hide);
 }
 
 // Two delayed samples after a state change. The game may hide or show the
@@ -237,7 +207,6 @@ bool ApplyCursorForced(bool aEnabled)
     if (aEnabled == s_cursorForced)
         return true;
 
-    RememberHideReasons(engine->unkD0);
     LogCursorSample(aEnabled ? "before force(true)" : "before force(false)");
     forceCursor(engine->unkD0, kReason, aEnabled);
     // Only after the call actually executed -- a failed apply must not poison
@@ -249,57 +218,6 @@ bool ApplyCursorForced(bool aEnabled)
     LogCursorSample(aEnabled ? "right after force(true)" : "right after force(false)");
     ScheduleCursorSamples(aEnabled);
 
-    return true;
-}
-
-// After a gameplay reattach: if nobody forces the pointer and nobody hides it
-// either, the game dropped its own lock while we were detached (seen when a
-// popup closed under a detach). Put back the reasons last seen holding it.
-// Returns false when there is nothing safe to do; every branch is logged.
-bool RestoreCursorLock()
-{
-    static HideCursor_t hideCursor = ResolveHideCursor();
-    if (!hideCursor)
-        return false;
-
-    auto* engine = RED4ext::CGameEngine::Get();
-    if (!engine || !engine->unkD0)
-        return false;
-
-    char forced[160] = "[?]";
-    char hide[160]   = "[?]";
-    DescribeReasons(engine->unkD0, kForcedReasonsOffset, forced, sizeof(forced));
-    DescribeReasons(engine->unkD0, kHideReasonsOffset, hide, sizeof(hide));
-
-    RED4ext::CName scratch[kMaxReasons];
-    std::uint32_t  forcedTotal = 0;
-    std::uint32_t  hideTotal   = 0;
-    CopyReasons(ReasonArray(engine->unkD0, kForcedReasonsOffset), scratch, &forcedTotal);
-    CopyReasons(ReasonArray(engine->unkD0, kHideReasonsOffset), scratch, &hideTotal);
-
-    if (hideTotal != 0)
-        return true; // the game still holds its lock; nothing to restore
-
-    if (forcedTotal != 0)
-    {
-        if (s_sdk)
-            s_sdk->logger->WarnF(s_handle, "RestoreCursorLock: pointer still forced by %s; not touching it", forced);
-        return false;
-    }
-
-    if (s_lastHideCount == 0)
-    {
-        if (s_sdk)
-            s_sdk->logger->Warn(s_handle, "RestoreCursorLock: hide array is empty and no lock reason has been seen yet");
-        return false;
-    }
-
-    for (std::uint32_t i = 0; i < s_lastHideCount; ++i)
-        hideCursor(engine->unkD0, s_lastHideReasons[i]);
-
-    DescribeReasons(engine->unkD0, kHideReasonsOffset, hide, sizeof(hide));
-    if (s_sdk)
-        s_sdk->logger->InfoF(s_handle, "RestoreCursorLock: hide array was empty after reattach; restored %s", hide);
     return true;
 }
 } // namespace
@@ -364,19 +282,6 @@ void FreeCursor_SetWheelBlock(RED4ext::IScriptable* aContext, RED4ext::CStackFra
         *aOut = ok;
 }
 
-void FreeCursor_RestoreCursorLock(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, bool* aOut,
-                                  int64_t a4)
-{
-    RED4EXT_UNUSED_PARAMETER(aContext);
-    RED4EXT_UNUSED_PARAMETER(a4);
-
-    aFrame->code++; // skip ParamEnd - omitting this corrupts the script VM
-
-    const bool ok = RestoreCursorLock();
-    if (aOut)
-        *aOut = ok;
-}
-
 void PostRegisterTypes()
 {
     auto* rtti = RED4ext::CRTTISystem::Get();
@@ -401,12 +306,6 @@ void PostRegisterTypes()
     wheelBlockFunc->AddParam("Bool", "enabled");
     wheelBlockFunc->SetReturnType("Bool");
     rtti->RegisterFunction(wheelBlockFunc);
-
-    auto* restoreFunc = RED4ext::CGlobalFunction::Create(
-        "FreeCursor_RestoreCursorLock", "FreeCursor_RestoreCursorLock", &FreeCursor_RestoreCursorLock);
-    restoreFunc->flags = {.isNative = true, .isStatic = true};
-    restoreFunc->SetReturnType("Bool");
-    rtti->RegisterFunction(restoreFunc);
 }
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
@@ -439,7 +338,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name    = L"FreeCursor";
     aInfo->author  = L"ringo";
-    aInfo->version = RED4EXT_V1_SEMVER(0, 5, 3);
+    aInfo->version = RED4EXT_V1_SEMVER(0, 5, 4);
     aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_2_31;
     aInfo->sdk     = RED4EXT_V1_SDK_VERSION_CURRENT;
 }

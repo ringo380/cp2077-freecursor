@@ -84,6 +84,15 @@ constexpr USHORT kRawButtonUpFlags = kRawButtonDownFlags << 1;
 // from the window thread; cleared whenever swallow is disarmed.
 std::atomic<USHORT> g_swallowedDowns{0};
 
+// Same idea for the LEGACY (WM_*BUTTON*) stream. CET's ImGui backend lives on
+// the legacy messages, not raw: it calls SetCapture(gameHwnd) on a button DOWN
+// and ReleaseCapture() on the matching UP. If we are the outermost WndProc and
+// eat a legacy UP whose DOWN happened before the swallow armed (a click inside
+// the phone popup, say), ImGui never releases, the game window keeps the mouse
+// captured, and WM_SETCURSOR is never sent again - so the pointer the popup
+// left visible is never hidden. Balance it exactly like the raw path.
+std::atomic<USHORT> g_swallowedLegacyDowns{0};
+
 // Windows Magnifier zooms on Ctrl+Alt+wheel. A wheel packet carries no motion,
 // so it can never move the camera; the only reason to eat it is to stop the
 // game scrolling/zooming underneath a Magnifier zoom gesture. Everything else
@@ -187,6 +196,37 @@ bool PassesSwallowedButtonUp(USHORT aButtonFlags)
     return false;
 }
 
+// One bit per mouse button for the legacy stream; XBUTTON1/2 ride in HIWORD.
+USHORT LegacyButtonBit(UINT aMsg, WPARAM awParam, bool& aIsDown, bool& aIsUp)
+{
+    aIsDown = aIsUp = false;
+    switch (aMsg)
+    {
+    case WM_LBUTTONDOWN: aIsDown = true; return 0x01;
+    case WM_LBUTTONUP:   aIsUp = true;   return 0x01;
+    case WM_RBUTTONDOWN: aIsDown = true; return 0x02;
+    case WM_RBUTTONUP:   aIsUp = true;   return 0x02;
+    case WM_MBUTTONDOWN: aIsDown = true; return 0x04;
+    case WM_MBUTTONUP:   aIsUp = true;   return 0x04;
+    case WM_XBUTTONDOWN: aIsDown = true; return GET_XBUTTON_WPARAM(awParam) == XBUTTON1 ? 0x08 : 0x10;
+    case WM_XBUTTONUP:   aIsUp = true;   return GET_XBUTTON_WPARAM(awParam) == XBUTTON1 ? 0x08 : 0x10;
+    default:             return 0;
+    }
+}
+
+// Returns true if this legacy button UP must be forwarded (its DOWN was not
+// swallowed), so CET/ImGui gets the release and balances its SetCapture. Same
+// invariant as the raw path: a stray UP is harmless to the game; a missing one
+// is not.
+bool PassesSwallowedLegacyButtonUp(USHORT aBit)
+{
+    const USHORT seen = g_swallowedLegacyDowns.load(std::memory_order_relaxed);
+    if (!(seen & aBit))
+        return true;
+    g_swallowedLegacyDowns.store(static_cast<USHORT>(seen & ~aBit), std::memory_order_relaxed);
+    return false;
+}
+
 bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
 {
     RAWINPUT raw{};
@@ -259,7 +299,21 @@ LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM al
         return (wheelBlock && CtrlAltHeld()) ? 1 : CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
 
     if (swallow && IsLegacyMouseMessage(auMsg))
+    {
+        bool         isDown = false;
+        bool         isUp   = false;
+        const USHORT bit    = LegacyButtonBit(auMsg, awParam, isDown, isUp);
+        if (isUp && bit && PassesSwallowedLegacyButtonUp(bit))
+            // Release whose press we did not swallow: forward it so CET's ImGui
+            // backend can ReleaseCapture. Otherwise the window stays captured
+            // and the pointer never re-hides.
+            return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
+        if (isDown && bit)
+            g_swallowedLegacyDowns.store(
+                static_cast<USHORT>(g_swallowedLegacyDowns.load(std::memory_order_relaxed) | bit),
+                std::memory_order_relaxed);
         return 1; // consumed: the game never sees it
+    }
 
     return CallWindowProc(g_originalProc, ahWnd, auMsg, awParam, alParam);
 }
@@ -363,6 +417,7 @@ void freecursor::WindowHook::Uninstall()
     g_swallow.store(false, std::memory_order_release);
     g_wheelBlock.store(false, std::memory_order_release);
     g_swallowedDowns.store(0, std::memory_order_release);
+    g_swallowedLegacyDowns.store(0, std::memory_order_release);
     g_swallowedModsRaw.store(0, std::memory_order_release);
     g_swallowedModsLegacy.store(0, std::memory_order_release);
 }
@@ -377,6 +432,7 @@ bool freecursor::WindowHook::SetSwallow(bool aEnabled)
     // clears for the same reason in reverse - once packets flow again, a
     // release the game never saw the press for is simply ignored by it.
     g_swallowedDowns.store(0, std::memory_order_release);
+    g_swallowedLegacyDowns.store(0, std::memory_order_release);
     g_swallowedModsRaw.store(0, std::memory_order_release);
     g_swallowedModsLegacy.store(0, std::memory_order_release);
     if (g_swallow.exchange(aEnabled, std::memory_order_acq_rel) != aEnabled)

@@ -128,13 +128,6 @@ local function teardown()
   mod.s.detached = not cursorOk
   mod.recovering = not cursorOk
 
-  -- The game hides the pointer in gameplay by holding a lock reason of its
-  -- own. A popup that closes while we are detached can drop that lock, and
-  -- releasing our force then leaves the pointer showing with nobody asking
-  -- for it. Only in gameplay: a menu is entitled to a visible pointer.
-  if cursorOk and GameUI.IsDefault() and Game.FreeCursor_RestoreCursorLock then
-    Game.FreeCursor_RestoreCursorLock()
-  end
 end
 
 -- Apply an action returned by state.lua. All three natives are applied
@@ -295,7 +288,6 @@ registerForEvent("onInit", function()
     "FreeCursor_SetCursorForced",
     "FreeCursor_SetInputSwallow",
     "FreeCursor_SetWheelBlock",
-    "FreeCursor_RestoreCursorLock",
   }) do
     if type(Game[name]) ~= "function" then
       table.insert(missing, name)

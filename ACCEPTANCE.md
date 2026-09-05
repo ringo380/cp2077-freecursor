@@ -1,12 +1,18 @@
 # FreeCursor - in-game acceptance checklist
 
-**0.5.3 (2026-09-05): the stuck pointer reproduced; this build logs the cause
-and repairs it - step 14 is live again.** Native and Lua change. Import
-`dist/FreeCursor-0.5.3.zip`, confirm the deployed DLL hash matches the staged
-one, and that the RED4ext log reports version 0.5.3. Every cursor sample now
-ends in `forced=[...] hide=[...]`, the two reason lists inside the game's
-input system that decide the pointer, and a gameplay reattach that finds
-both empty logs `RestoreCursorLock:` and puts the game's own lock back.
+**0.5.4 (2026-09-05): the stuck pointer's real cause found and fixed.** Native
+and Lua change. Import `dist/FreeCursor-0.5.4.zip`, confirm the deployed DLL
+hash matches the staged one, and that the RED4ext log reports version 0.5.4.
+The cause was a held mouse capture, not the reason lists: when FreeCursor is
+the outermost window hook and the gameplay swallow eats a legacy button-up
+whose down happened before the swallow armed (a click inside the phone
+popup), CET's ImGui backend never gets its release and never balances its
+`SetCapture(gameWindow)`. While the game window holds the capture, Windows
+sends no `WM_SETCURSOR`, so the pointer the popup left visible is never
+hidden. The fix forwards any legacy button-up whose down we did not swallow,
+mirroring the raw-input path. The samples now also print `capture=%p`, the
+proof field. 0.5.3's `RestoreCursorLock` is removed; it acted on a disproven
+theory (an empty hide list) and never fired on the real bug.
 
 **0.5.2 (2026-09-04): the 0.5.1 diagnostic logging removed.** Native and
 Lua change, no behaviour change; the code is the 0.5.0 shape again. Import
@@ -267,7 +273,7 @@ All in normal gameplay, standing, with the cursor detached via `Numpad 9`:
       (menus are not affected by this change).
 - [x] CET's overlay key still opens the overlay after each of the above.
 
-## 14. Cursor still visible after reattach - reproduced 2026-09-04, repaired in 0.5.3
+## 14. Cursor still visible after reattach - held-capture bug, fixed in 0.5.4
 
 Reported 2026-09-03: the pointer sometimes stays on screen after the toggle
 reattaches in gameplay. That day's logs show every reattach released all
@@ -289,26 +295,28 @@ menu, a vehicle, the scanner or a popup), so the path under suspicion is
       to fix. 0.5.2 removed the samples and the context prints; if the
       report comes back, the 0.5.1 diff is the diagnostic to reapply.
 
-**Reproduced 2026-09-04 23:43 session (0.5.1 still deployed):** every
-reattach that followed "detach inside the messenger popup, popup closes
-while detached, reattach in gameplay" left the arrow pointer showing at the
-screen centre, five times out of five. A reattach while the popup was still
-open hid it. Alt-tab cleared it twice out of three. The game's WM_SETCURSOR
-handler hides the pointer only when its hide-reason list is non-empty and
-its forced-reason list is empty, so one of the two was wrong after the popup
-closed under our force. 0.5.3 logs both lists and, after a gameplay
-reattach that finds both empty, re-adds the hide reasons last seen holding
-the pointer.
+**Root cause, found 2026-09-05.** The reason lists were a red herring. At the
+stuck moment they already read `forced=[] hide=[gameState_Session]`, the
+hide state, yet the pointer showed. Reading the game's memory from outside
+the process while it was stuck showed the game window holding the mouse
+capture (`GetGUIThreadInfo.hwndCapture` = the game window); clean gameplay
+holds none, because the game reads mouselook through Raw Input. So the stale
+visible pointer set by the popup was never refreshed: a captured window is
+sent no `WM_SETCURSOR`. The capture is CET's ImGui backend, which
+`SetCapture`s on a legacy button-down and releases on the matching up; the
+down happened in the popup (swallow off, so it reached CET) and the up
+arrived after the swallow armed and was eaten, so CET never released. The
+split matched hook order exactly: FreeCursor outermost stuck 2 of 2, CET
+outermost clean 3 of 3.
 
 - [ ] Detach inside a messenger thread (the GenText popup), close the
       thread while detached, reattach in gameplay. The pointer must hide.
-- [ ] In the RED4ext log, the `before force(true)` sample of a gameplay
-      detach shows `hide=[<name>]`; note the name, it is the game's lock.
-- [ ] After the popup case, either the `100ms after force(false)` sample
-      already shows `hide=[...]` non-empty, or a `RestoreCursorLock:
-      hide array was empty after reattach; restored [...]` line follows it.
-- [ ] If instead the log says `pointer still forced by [...]`, the stuck
-      state is a foreign forced reason: report the name.
+- [ ] The `100ms after force(false)` sample of that reattach must read
+      `showing=0` and `capture=0000000000000000`. Both are provable from
+      the RED4ext log without watching the screen.
+- [ ] Note which module the `Window hook installed` line names: the fix must
+      hold whether FreeCursor is ahead of CET (`cyber_engine_tweaks.asi`) or
+      behind it (`Cyberpunk2077.exe`).
 
 ## 11. Logs
 
