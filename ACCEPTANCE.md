@@ -1,5 +1,11 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.5.2 (2026-09-04): the 0.5.1 diagnostic logging removed.** Native and
+Lua change, no behaviour change; the code is the 0.5.0 shape again. Import
+`dist/FreeCursor-0.5.2.zip`, confirm the deployed DLL hash matches the
+staged one, and that the RED4ext log reports version 0.5.2 with no
+`cursor before force` lines. Step 3 is the regression set.
+
 **0.5.1 (2026-09-03): diagnostic build for the cursor that stays visible
 after reattaching - step 14 is new.** Logging only, no behaviour change.
 Import `dist/FreeCursor-0.5.1.zip`; the RED4ext log must report version
@@ -84,7 +90,7 @@ being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.5.1.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.5.2.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
@@ -253,7 +259,7 @@ All in normal gameplay, standing, with the cursor detached via `Numpad 9`:
       (menus are not affected by this change).
 - [x] CET's overlay key still opens the overlay after each of the above.
 
-## 14. Cursor still visible after reattach - diagnostic in 0.5.1
+## 14. Cursor still visible after reattach - diagnostic in 0.5.1, removed in 0.5.2
 
 Reported 2026-09-03: the pointer sometimes stays on screen after the toggle
 reattaches in gameplay. That day's logs show every reattach released all
@@ -261,18 +267,19 @@ three natives, and every detach began outside GameUI's default context (a
 menu, a vehicle, the scanner or a popup), so the path under suspicion is
 "detach outside gameplay, walk into gameplay, reattach there".
 
-- [ ] On foot, attached: press `Numpad 9` to detach, `Numpad 9` again to reattach. Note
-      whether the pointer hides.
-- [ ] In a vehicle: same two presses. Note whether the pointer hides.
-- [ ] Open the inventory, press `Numpad 9` to detach, close the inventory, press
+- [x] On foot, attached: press `Numpad 9` to detach, `Numpad 9` again to
+      reattach. Note whether the pointer hides.
+- [x] In a vehicle: same two presses. Note whether the pointer hides.
+- [x] Open the inventory, press `Numpad 9` to detach, close the inventory, press
       `Numpad 9` in gameplay. Note whether the pointer hides.
-- [ ] Any time the pointer stays visible: does moving the mouse hide it?
+- [x] Any time the pointer stays visible: does moving the mouse hide it?
       Does opening and closing a menu hide it? Note which.
-- [ ] Afterwards, keep the RED4ext log and the CET `scripting.log`. Each
-      `ForceCursor(false) applied` line is bracketed by `cursor before`,
-      `cursor right after`, `100ms after` and `1s after` samples with
-      `showing=` and `gameForeground=`; the CET log names the GameUI context
-      on every press.
+- [x] Afterwards, keep the RED4ext log and the CET `scripting.log`. Under
+      0.5.1 each `ForceCursor(false) applied` line was bracketed by cursor
+      samples and the CET log named the GameUI context on every press.
+      Result: 11 pairs, the pointer hid within 100 ms every time, nothing
+      to fix. 0.5.2 removed the samples and the context prints; if the
+      report comes back, the 0.5.1 diff is the diagnostic to reapply.
 
 ## 11. Logs
 
