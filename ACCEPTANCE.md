@@ -1,5 +1,13 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.5.3 (2026-09-05): the stuck pointer reproduced; this build logs the cause
+and repairs it - step 14 is live again.** Native and Lua change. Import
+`dist/FreeCursor-0.5.3.zip`, confirm the deployed DLL hash matches the staged
+one, and that the RED4ext log reports version 0.5.3. Every cursor sample now
+ends in `forced=[...] hide=[...]`, the two reason lists inside the game's
+input system that decide the pointer, and a gameplay reattach that finds
+both empty logs `RestoreCursorLock:` and puts the game's own lock back.
+
 **0.5.2 (2026-09-04): the 0.5.1 diagnostic logging removed.** Native and
 Lua change, no behaviour change; the code is the 0.5.0 shape again. Import
 `dist/FreeCursor-0.5.2.zip`, confirm the deployed DLL hash matches the
@@ -90,7 +98,7 @@ being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.5.2.zip` through Vortex and deploy.
+- [ ] Import `dist/FreeCursor-0.5.3.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
@@ -259,7 +267,7 @@ All in normal gameplay, standing, with the cursor detached via `Numpad 9`:
       (menus are not affected by this change).
 - [x] CET's overlay key still opens the overlay after each of the above.
 
-## 14. Cursor still visible after reattach - diagnostic in 0.5.1, removed in 0.5.2
+## 14. Cursor still visible after reattach - reproduced 2026-09-04, repaired in 0.5.3
 
 Reported 2026-09-03: the pointer sometimes stays on screen after the toggle
 reattaches in gameplay. That day's logs show every reattach released all
@@ -280,6 +288,27 @@ menu, a vehicle, the scanner or a popup), so the path under suspicion is
       Result: 11 pairs, the pointer hid within 100 ms every time, nothing
       to fix. 0.5.2 removed the samples and the context prints; if the
       report comes back, the 0.5.1 diff is the diagnostic to reapply.
+
+**Reproduced 2026-09-04 23:43 session (0.5.1 still deployed):** every
+reattach that followed "detach inside the messenger popup, popup closes
+while detached, reattach in gameplay" left the arrow pointer showing at the
+screen centre, five times out of five. A reattach while the popup was still
+open hid it. Alt-tab cleared it twice out of three. The game's WM_SETCURSOR
+handler hides the pointer only when its hide-reason list is non-empty and
+its forced-reason list is empty, so one of the two was wrong after the popup
+closed under our force. 0.5.3 logs both lists and, after a gameplay
+reattach that finds both empty, re-adds the hide reasons last seen holding
+the pointer.
+
+- [ ] Detach inside a messenger thread (the GenText popup), close the
+      thread while detached, reattach in gameplay. The pointer must hide.
+- [ ] In the RED4ext log, the `before force(true)` sample of a gameplay
+      detach shows `hide=[<name>]`; note the name, it is the game's lock.
+- [ ] After the popup case, either the `100ms after force(false)` sample
+      already shows `hide=[...]` non-empty, or a `RestoreCursorLock:
+      hide array was empty after reattach; restored [...]` line follows it.
+- [ ] If instead the log says `pointer still forced by [...]`, the stuck
+      state is a foreign forced reason: report the name.
 
 ## 11. Logs
 

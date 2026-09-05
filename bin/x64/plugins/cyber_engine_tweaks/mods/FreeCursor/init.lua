@@ -67,6 +67,29 @@ local function context()
   }
 end
 
+-- Diagnostic: name the GameUI context behind a decision. IsDefault is false
+-- in a vehicle, the scanner, a popup and the radial wheel as well as in
+-- menus, and the RED4ext log cannot tell those apart; this line can.
+-- GameUI fills in its Context table on first use, not at require time, so
+-- the name map is built on the first call.
+local contextNames = nil
+
+local function describeContext(source, ctx)
+  if not contextNames then
+    contextNames = {}
+    for name, enum in pairs(GameUI.Context or {}) do
+      contextNames[enum.value] = name
+    end
+  end
+  local raw = GameUI.GetContext()
+  local menu = GameUI.GetMenu()
+  print(("[FreeCursor] %s: context=%s menu=%s default=%s isMenu=%s blocked=%s vehicle=%s scanner=%s popup=%s wheel=%s detached=%s")
+    :format(source, tostring(contextNames[raw.value] or raw.value), tostring(menu),
+      tostring(ctx.isDefault), tostring(ctx.isMenu), tostring(ctx.isBlocked),
+      tostring(GameUI.IsVehicle()), tostring(GameUI.IsScanner()), tostring(GameUI.IsPopup()),
+      tostring(GameUI.IsWheel()), tostring(mod.s.detached)))
+end
+
 -- Drive toward the fully-attached state. This is the ONLY path that ever
 -- clears swallow/wheel, and it never early-returns: wheel, swallow, and
 -- cursor are each attempted independently and unconditionally, so a
@@ -104,6 +127,14 @@ local function teardown()
 
   mod.s.detached = not cursorOk
   mod.recovering = not cursorOk
+
+  -- The game hides the pointer in gameplay by holding a lock reason of its
+  -- own. A popup that closes while we are detached can drop that lock, and
+  -- releasing our force then leaves the pointer showing with nobody asking
+  -- for it. Only in gameplay: a menu is entitled to a visible pointer.
+  if cursorOk and GameUI.IsDefault() and Game.FreeCursor_RestoreCursorLock then
+    Game.FreeCursor_RestoreCursorLock()
+  end
 end
 
 -- Apply an action returned by state.lua. All three natives are applied
@@ -182,6 +213,7 @@ end
 local function reevaluate()
   if not mod.ready then return end
   local ctx = context()
+  if mod.s.detached then describeContext("context change", ctx) end
   apply(state.setAuto(mod.s, autoWanted(ctx), ctx))
 end
 
@@ -263,6 +295,7 @@ registerForEvent("onInit", function()
     "FreeCursor_SetCursorForced",
     "FreeCursor_SetInputSwallow",
     "FreeCursor_SetWheelBlock",
+    "FreeCursor_RestoreCursorLock",
   }) do
     if type(Game[name]) ~= "function" then
       table.insert(missing, name)
@@ -307,7 +340,9 @@ registerHotkey("freecursor_toggle", "Toggle free cursor", function()
     print("[FreeCursor] Not initialized; plugin missing or incomplete.")
     return
   end
-  apply(state.toggle(mod.s, context()))
+  local ctx = context()
+  describeContext("hotkey", ctx)
+  apply(state.toggle(mod.s, ctx))
 end)
 
 -- Fail closed on shutdown: always force-clear all three natives regardless

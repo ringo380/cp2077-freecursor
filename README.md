@@ -217,6 +217,15 @@ every keypress looked like a combo to CET. 0.3.0 forwards any release whose
 press it did not swallow. If it ever recurs: alt-tab out and back (CET resets
 its key state on focus loss), or click once inside any menu.
 
+**The pointer stays on screen, parked at the centre, after reattaching in
+gameplay.** Seen after detaching inside a popup (the messenger thread, for
+one) and closing it while still detached. The game hides the pointer only
+while its own "keep hidden" list is non-empty and nobody is forcing it
+visible; a popup closing under a detach can leave that list empty. Since
+0.5.3 a gameplay reattach checks both lists and puts the game's lock back,
+logging `RestoreCursorLock:` in the RED4ext log when it does. Alt-tab out
+and back also clears it most of the time.
+
 **Where to look for logs.** RED4ext plugin messages (address resolution,
 native call failures) go to RED4ext's own log output under `red4ext/logs/`.
 Lua-side messages (missing plugin, per-toggle failures) print to CET's
@@ -267,6 +276,14 @@ Three independent RED4ext RTTI globals, called from `init.lua`:
 | `FreeCursor_SetCursorForced(Bool) -> Bool` | frees/re-locks the OS pointer via the game's own `ForceCursor` |
 | `FreeCursor_SetInputSwallow(Bool) -> Bool` | swallows all mouse input, plus the Ctrl and Alt keys, at the window level (gameplay only) |
 | `FreeCursor_SetWheelBlock(Bool) -> Bool` | swallows the mouse wheel while Ctrl+Alt are held (whenever detached, gameplay and menus alike) |
+| `FreeCursor_RestoreCursorLock() -> Bool` | after a gameplay reattach, re-adds the game's own "keep hidden" reason if a popup dropped it |
+
+The game's input system keeps two lists of reason names: one that forces
+the pointer visible (what `ForceCursor` edits) and one that keeps it hidden.
+Its `WM_SETCURSOR` handler hides the pointer only while the hidden list is
+non-empty and the forced list is empty. FreeCursor logs both lists around
+every transition, and the restore native re-adds the hidden-list names it
+last saw when a reattach finds both lists empty.
 
 The game reads input through Win32 Raw Input, so a `WM_INPUT` message can
 carry a keyboard event as well as mouse motion. The hook reads each raw
