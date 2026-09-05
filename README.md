@@ -93,8 +93,9 @@ stages source only, so copy the built `FreeCursor.dll` into the staged
 
 **After installing, you must bind the hotkey yourself:** open CET's overlay
 (default `~`), go to **Bindings**, find **"Toggle free cursor"** under the
-FreeCursor mod, and assign a key. **Semicolon (`;`) is the recommended
-binding** - it is unused by the game and sits under the right hand. Do not
+FreeCursor mod, and assign a key. **Numpad 9 is the recommended
+binding** - the game does not bind the numpad, and it is easy to find by
+touch away from the movement keys. Do not
 bind a combination that includes Ctrl or Alt: those two keys are held back
 from the game while detached in gameplay (see Usage), and depending on
 launch order the combination can be held back from CET too. CET

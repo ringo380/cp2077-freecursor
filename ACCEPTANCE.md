@@ -7,6 +7,13 @@ Import `dist/FreeCursor-0.5.1.zip`; the RED4ext log must report version
 transition, and the CET console must print `[FreeCursor] hotkey: context=`
 on every press.
 
+**0.5.1 result (2026-09-04):** two logged sessions, 11 detach/reattach
+pairs, the pointer hid within 100 ms of every reattach, including detaches
+made inside the pause menu and inside a modal popup that were released in
+gameplay. The report has not reproduced. Steps 8, 9 and 13 were run before
+the 0.5.1 logging existed and are ticked on the tester's word; step 9's
+per-state observations were not written down at the time.
+
 **0.5.0 (2026-09-02): Ctrl and Alt held back from the game while detached
 in gameplay - step 13 is new.** Native change. Import
 `dist/FreeCursor-0.5.0.zip`, confirm the deployed DLL hash matches the
@@ -82,7 +89,7 @@ being able to press the key that undoes it.
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
       build names the wrong function and reads entirely plausible.
-- [ ] Launch, bind the hotkey in CET's Bindings tab to **`;`** (**there is no
+- [ ] Launch, bind the hotkey in CET's Bindings tab to **`Numpad 9`** (**there is no
       default binding** - the mod does nothing until you set one), load a save.
 - [ ] `red4ext/logs/` contains `FreeCursor loaded` and, a moment later,
       `Window hook installed; previous WndProc belongs to <module>`. Note the
@@ -127,12 +134,12 @@ two minutes until a right-click inside a menu. Run it on a launch where the
 log says `previous WndProc belongs to cyber_engine_tweaks.asi`; on the other
 order it never reproduced and passing proves less.
 
-- [ ] In gameplay, attached: **hold right-click** (aim), press `;`, release
-      right-click. Press `;` again. It must reattach, immediately.
+- [ ] In gameplay, attached: **hold right-click** (aim), press `Numpad 9`, release
+      right-click. Press `Numpad 9` again. It must reattach, immediately.
 - [ ] Same with **left-click** held, and with the **middle button** held.
 - [ ] Detach with nothing held, then click left and right a few times while
       detached (the game must not react - clicks are still swallowed in
-      gameplay), then press `;`. It must reattach.
+      gameplay), then press `Numpad 9`. It must reattach.
 - [ ] CET's overlay key still opens the overlay after each of the above.
 
 ## 4. Refcount probe - the most important unverified assumption
@@ -171,11 +178,11 @@ that needs a fix. This is the single highest-value check here.
 While detached, trigger each and confirm it reattaches with no residual free
 pointer:
 
-- [ ] a scene / cutscene
-- [ ] photo mode
-- [ ] a braindance
-- [ ] loading a save
-- [ ] quitting to main menu
+- [x] a scene / cutscene
+- [x] photo mode
+- [x] a braindance
+- [x] loading a save
+- [x] quitting to main menu
 
 ## 9. Fall-through UI states - known gap, needs your observation
 
@@ -183,12 +190,13 @@ These screens are none of gameplay/menu/blocked, so detaching there frees the
 cursor with a **live camera**. Nobody guessed at a fix, because blanket
 swallowing would break device-screen clicks. Record what actually happens:
 
-- [ ] scanner / quickhack - camera moves? clicks work?
-- [ ] inside a vehicle - camera moves? clicks work?
-- [ ] a computer / device terminal - camera moves? clicks work?
+- [x] scanner / quickhack - camera moves? clicks work?
+- [x] inside a vehicle - camera moves? clicks work?
+- [x] a computer / device terminal - camera moves? clicks work?
 
 Reading a shard via the scanner is plausibly a core use case, so this one
-matters. Your answers decide the fix.
+matters. Your answers decide the fix. Run before 0.5.1; reported done on
+2026-09-04 with no per-state notes, so the questions above are still open.
 
 ## 10. Interruptions
 
@@ -209,9 +217,9 @@ matters. Your answers decide the fix.
       frees itself within a moment of the phone opening. Clicks and the wheel
       work in the thread. Close the phone: the cursor locks and the camera
       responds. Repeat three times.
-- [ ] Manual wins: detach with `;` first, then open and close the phone. The
-      cursor stays free the whole time; `;` reattaches.
-- [ ] Hotkey inside: let the phone detach you, press `;` while it is open
+- [ ] Manual wins: detach with `Numpad 9` first, then open and close the phone. The
+      cursor stays free the whole time; `Numpad 9` reattaches.
+- [ ] Hotkey inside: let the phone detach you, press `Numpad 9` while it is open
       (locks), then close the phone. Nothing further happens.
 - [ ] Turn on **Detach in menus**. Open the inventory: cursor frees. Close it:
       cursor locks. Open the map, then the journal, then the pause menu -
@@ -229,35 +237,35 @@ matters. Your answers decide the fix.
 
 ## 13. Ctrl and Alt while detached in gameplay - new in 0.5.0
 
-All in normal gameplay, standing, with the cursor detached via `;`:
+All in normal gameplay, standing, with the cursor detached via `Numpad 9`:
 
-- [ ] Tap and hold **Ctrl** alone. V does not crouch or dodge.
-- [ ] Tap **Alt** alone. No item switch.
-- [ ] **Ctrl+Alt+wheel**: Magnifier zooms, nothing happens in game.
-- [ ] Release everything, press `;` to reattach. Ctrl now crouches and Alt
+- [x] Tap and hold **Ctrl** alone. V does not crouch or dodge.
+- [x] Tap **Alt** alone. No item switch.
+- [x] **Ctrl+Alt+wheel**: Magnifier zooms, nothing happens in game.
+- [x] Release everything, press `Numpad 9` to reattach. Ctrl now crouches and Alt
       now switches as normal; nothing is stuck.
-- [ ] Reverse order: **hold Ctrl first** (crouched), press `;` while still
+- [x] Reverse order: **hold Ctrl first** (crouched), press `Numpad 9` while still
       holding it, then release Ctrl. V stands up (the release reached the
-      game). Press `;` to reattach.
-- [ ] Detach, hold Ctrl, press `;` to reattach while still holding, then
+      game). Press `Numpad 9` to reattach.
+- [x] Detach, hold Ctrl, press `Numpad 9` to reattach while still holding, then
       release. No stuck crouch either way.
-- [ ] In a menu, detached: Ctrl and Alt behave exactly as they do attached
+- [x] In a menu, detached: Ctrl and Alt behave exactly as they do attached
       (menus are not affected by this change).
-- [ ] CET's overlay key still opens the overlay after each of the above.
+- [x] CET's overlay key still opens the overlay after each of the above.
 
 ## 14. Cursor still visible after reattach - diagnostic in 0.5.1
 
-Reported 2026-09-03: the pointer sometimes stays on screen after `;`
+Reported 2026-09-03: the pointer sometimes stays on screen after the toggle
 reattaches in gameplay. That day's logs show every reattach released all
 three natives, and every detach began outside GameUI's default context (a
 menu, a vehicle, the scanner or a popup), so the path under suspicion is
 "detach outside gameplay, walk into gameplay, reattach there".
 
-- [ ] On foot, attached: press `;` to detach, `;` again to reattach. Note
+- [ ] On foot, attached: press `Numpad 9` to detach, `Numpad 9` again to reattach. Note
       whether the pointer hides.
 - [ ] In a vehicle: same two presses. Note whether the pointer hides.
-- [ ] Open the inventory, press `;` to detach, close the inventory, press
-      `;` in gameplay. Note whether the pointer hides.
+- [ ] Open the inventory, press `Numpad 9` to detach, close the inventory, press
+      `Numpad 9` in gameplay. Note whether the pointer hides.
 - [ ] Any time the pointer stays visible: does moving the mouse hide it?
       Does opening and closing a menu hide it? Note which.
 - [ ] Afterwards, keep the RED4ext log and the CET `scripting.log`. Each
