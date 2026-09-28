@@ -166,8 +166,9 @@ void LogCursorSample(const char* aWhen)
         DescribeReasons(engine->unkD0, kHideReasonsOffset, hide, sizeof(hide));
     }
     s_sdk->logger->InfoF(s_handle,
-                         "cursor %s: showing=%d hCursor=%p pos=(%ld,%ld) gameForeground=%d capture=%p forced=%s hide=%s",
+                         "cursor %s: showing=%d hCursor=%p ours=%d pos=(%ld,%ld) gameForeground=%d capture=%p forced=%s hide=%s",
                          aWhen, (info.flags & CURSOR_SHOWING) ? 1 : 0, static_cast<void*>(info.hCursor),
+                         info.hCursor && info.hCursor == freecursor::WindowHook::PointerHandle() ? 1 : 0,
                          info.ptScreenPos.x, info.ptScreenPos.y, fgPid == GetCurrentProcessId() ? 1 : 0,
                          static_cast<void*>(GetCapture()), forced, hide);
 }
@@ -209,6 +210,7 @@ bool ApplyCursorForced(bool aEnabled)
 
     LogCursorSample(aEnabled ? "before force(true)" : "before force(false)");
     forceCursor(engine->unkD0, kReason, aEnabled);
+    freecursor::WindowHook::SetPointer(aEnabled);
     // Only after the call actually executed -- a failed apply must not poison
     // the cache.
     s_cursorForced = aEnabled;
@@ -338,8 +340,11 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name    = L"FreeCursor";
     aInfo->author  = L"ringo";
-    aInfo->version = RED4EXT_V1_SEMVER(0, 5, 4);
-    aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_2_31;
+    aInfo->version = RED4EXT_V1_SEMVER(0, 6, 0);
+    // Not pinned to a game version: the one engine function used is found by
+    // address hash, and a hash that stops resolving is logged and disables
+    // the mod rather than crashing, so a patch cannot break it silently.
+    aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_INDEPENDENT;
     aInfo->sdk     = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
 

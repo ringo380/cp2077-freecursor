@@ -31,4 +31,13 @@ bool SetSwallow(bool aEnabled);
 // Returns false if the hook is not installed yet, in which case the flag is
 // NOT applied.
 bool SetWheelBlock(bool aEnabled);
+
+// Shows FreeCursor's own pointer (drawn in the game's menu-cursor style, at
+// the player's Windows pointer size) in place of the Windows arrow while
+// enabled. Called alongside ForceCursor: on when the cursor detaches, off
+// when it reattaches. The game hides the pointer itself after a reattach.
+void SetPointer(bool aEnabled);
+
+// The pointer's handle, or null before the first detach. For the log.
+void* PointerHandle();
 } // namespace freecursor::WindowHook

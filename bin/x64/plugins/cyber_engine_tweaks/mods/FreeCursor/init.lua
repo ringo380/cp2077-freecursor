@@ -19,10 +19,10 @@ local state = require("state")
 local mod = { s = state.new(), ready = false, recovering = false, phoneOpen = false }
 
 -- User settings, persisted to settings.json in this mod's folder (CET's io
--- sandbox roots relative paths there). Every option defaults off so a fresh
--- install behaves exactly like 0.3.x until the player opts in.
+-- sandbox roots relative paths there). The phone trigger defaults on:
+-- reading messages is the main job the mod exists for. Menus default off.
 local SETTINGS_FILE = "settings.json"
-local settings = { autoPhone = false, autoMenu = false }
+local settings = { autoPhone = true, autoMenu = false }
 
 local function loadSettings()
   local f = io.open(SETTINGS_FILE, "r")
@@ -90,6 +90,39 @@ local function describeContext(source, ctx)
       tostring(GameUI.IsWheel()), tostring(mod.s.detached)))
 end
 
+-- While detached, FreeCursor's own pointer stands in for the game's, so the
+-- game's menu pointer (a widget owned by CursorGameController) is hidden to
+-- avoid showing two. The game shows and hides that widget only through
+-- animations, never through the root widget's visible flag. Even so, only
+-- widgets FreeCursor hid are ever shown again (hiddenGameCursors holds them
+-- until then), so a player who never detaches never has the game's pointer
+-- touched. Hiding happens whenever the controller hears from the game while
+-- detached (the pointer moving, a menu showing or hiding it), which is
+-- continuous while the mouse moves in a menu.
+local hiddenGameCursors = {}
+
+local function hideGameCursor(controller)
+  if not mod.s.detached then return end
+  pcall(function()
+    local root = controller:GetRootWidget()
+    if root and root:IsVisible() then
+      root:SetVisible(false)
+      table.insert(hiddenGameCursors, root)
+    end
+  end)
+end
+
+-- Called on every reattach and on shutdown (which a CET /reload runs too), so
+-- a hidden game pointer never outlives the detach that hid it.
+local function restoreGameCursors()
+  for _, root in ipairs(hiddenGameCursors) do
+    pcall(function()
+      if IsDefined(root) then root:SetVisible(true) end
+    end)
+  end
+  hiddenGameCursors = {}
+end
+
 -- Drive toward the fully-attached state. This is the ONLY path that ever
 -- clears swallow/wheel, and it never early-returns: wheel, swallow, and
 -- cursor are each attempted independently and unconditionally, so a
@@ -127,6 +160,7 @@ local function teardown()
 
   mod.s.detached = not cursorOk
   mod.recovering = not cursorOk
+  if cursorOk then restoreGameCursors() end
 
 end
 
@@ -260,7 +294,7 @@ local function registerSettingsUi()
 
   ns.addSwitch(sub, "Detach in the phone",
     "Free the cursor automatically when the phone or messenger opens, and lock it again when it closes. A detach you started with the hotkey is left alone.",
-    settings.autoPhone, false, function(value)
+    settings.autoPhone, true, function(value)
       settings.autoPhone = value
       saveSettings()
       if not value then mod.phoneOpen = false end
@@ -322,6 +356,10 @@ registerForEvent("onInit", function()
   -- free and only re-evaluates swallow, with wheel staying true throughout.
   -- The same callback carries the "detach in menus" trigger via reevaluate.
   GameUI.Observe(reevaluate)
+
+  for _, event in ipairs({ "OnSetCursorPosition", "OnSetCursorVisibility", "OnSetCursorContext" }) do
+    ObserveAfter("CursorGameController", event, hideGameCursor)
+  end
 end)
 
 -- registerHotkey callbacks only fire while the CET overlay is closed -- this
@@ -345,6 +383,7 @@ end)
 -- deliberately best-effort rather than routed through teardown()'s
 -- retry/recovery bookkeeping.
 registerForEvent("onShutdown", function()
+  restoreGameCursors()
   if mod.ready then
     Game.FreeCursor_SetWheelBlock(false)
     Game.FreeCursor_SetInputSwallow(false)

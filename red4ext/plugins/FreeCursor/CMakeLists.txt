@@ -15,6 +15,7 @@ FetchContent_MakeAvailable(RED4ext.SDK)
 add_library(FreeCursor SHARED
   src/dllmain.cpp
   src/window_hook.cpp
+  src/pointer_art.cpp
 )
 
 target_link_libraries(FreeCursor PRIVATE RED4ext::SDK)

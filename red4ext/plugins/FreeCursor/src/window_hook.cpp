@@ -1,13 +1,17 @@
 #include "window_hook.h"
 
+#include "pointer_art.h"
+
 #include <windows.h>
 
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <cwchar>
 #include <thread>
+#include <vector>
 
 namespace
 {
@@ -19,6 +23,14 @@ std::atomic<bool> g_installed{false};
 std::atomic<bool> g_shouldStop{false};
 std::thread       g_pollThread;
 freecursor::WindowHook::LogFn g_log = nullptr;
+
+// FreeCursor's own pointer, shown instead of the Windows arrow while the
+// cursor is detached. Built on first use at the player's Windows pointer
+// size, rebuilt if that size changes between detaches. Only touched from the
+// window thread (the script VM runs there too), so no locking.
+std::atomic<bool> g_pointerOn{false};
+HCURSOR           g_pointer     = nullptr;
+int               g_pointerSize = 0;
 
 void Logf(const char* aFmt, ...)
 {
@@ -259,12 +271,84 @@ bool ShouldSwallowWmInput(LPARAM alParam, bool aSwallow, bool aWheelBlock)
     return !PassesSwallowedButtonUp(buttonFlags);
 }
 
+// The pointer size the player chose in Windows (Accessibility > Mouse pointer
+// size writes CursorBaseSize, 32 by default and 16 more per step), scaled to
+// the game window's DPI the way Windows scales its own pointer.
+int PlayerPointerSize()
+{
+    DWORD value = 0;
+    DWORD bytes = sizeof(value);
+    int   size  = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", L"CursorBaseSize", RRF_RT_REG_DWORD, nullptr,
+                     &value, &bytes) == ERROR_SUCCESS)
+        size = static_cast<int>(value);
+    if (size <= 0)
+        size = GetSystemMetrics(SM_CXCURSOR);
+    const UINT dpi = g_hWnd ? GetDpiForWindow(g_hWnd) : 0;
+    if (dpi > 96)
+        size = MulDiv(size, static_cast<int>(dpi), 96);
+    return size < 32 ? 32 : (size > 256 ? 256 : size);
+}
+
+HCURSOR BuildPointer(int aSize)
+{
+    const auto art = freecursor::PointerArt::Render(aSize);
+
+    BITMAPV5HEADER header{};
+    header.bV5Size        = sizeof(header);
+    header.bV5Width       = aSize;
+    header.bV5Height      = -aSize; // top row first, as the art is laid out
+    header.bV5Planes      = 1;
+    header.bV5BitCount    = 32;
+    header.bV5Compression = BI_BITFIELDS;
+    header.bV5RedMask     = 0x00FF0000;
+    header.bV5GreenMask   = 0x0000FF00;
+    header.bV5BlueMask    = 0x000000FF;
+    header.bV5AlphaMask   = 0xFF000000;
+
+    void*      bits   = nullptr;
+    HDC        screen = GetDC(nullptr);
+    HBITMAP    colour = CreateDIBSection(screen, reinterpret_cast<BITMAPINFO*>(&header), DIB_RGB_COLORS, &bits,
+                                         nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!colour || !bits)
+        return nullptr;
+    std::memcpy(bits, art.pixels.data(), art.pixels.size() * sizeof(art.pixels[0]));
+
+    // An all-zero AND mask: with a 32-bit colour bitmap, Windows draws from
+    // the alpha channel and ignores the mask's shape.
+    std::vector<BYTE> maskBits(static_cast<std::size_t>((aSize + 15) / 16 * 2) * aSize, 0);
+    HBITMAP           mask = CreateBitmap(aSize, aSize, 1, 1, maskBits.data());
+
+    ICONINFO info{};
+    info.fIcon    = FALSE;
+    info.xHotspot = static_cast<DWORD>(art.hotX);
+    info.yHotspot = static_cast<DWORD>(art.hotY);
+    info.hbmMask  = mask;
+    info.hbmColor = colour;
+    HCURSOR cursor = reinterpret_cast<HCURSOR>(CreateIconIndirect(&info));
+
+    DeleteObject(colour);
+    if (mask)
+        DeleteObject(mask);
+    return cursor;
+}
+
 LRESULT APIENTRY HookedWndProc(HWND ahWnd, UINT auMsg, WPARAM awParam, LPARAM alParam)
 {
     const bool swallow    = g_swallow.load(std::memory_order_relaxed);
     const bool wheelBlock = g_wheelBlock.load(std::memory_order_relaxed);
 
     LogFocusMessage(auMsg, awParam, swallow, wheelBlock);
+
+    // While detached, the pointer over the game's client area is ours. The
+    // game's own handler would otherwise fall through to the class arrow.
+    if (auMsg == WM_SETCURSOR && LOWORD(alParam) == HTCLIENT && g_pointer &&
+        g_pointerOn.load(std::memory_order_relaxed))
+    {
+        SetCursor(g_pointer);
+        return TRUE;
+    }
 
     if (auMsg == WM_INPUT)
     {
@@ -420,6 +504,47 @@ void freecursor::WindowHook::Uninstall()
     g_swallowedLegacyDowns.store(0, std::memory_order_release);
     g_swallowedModsRaw.store(0, std::memory_order_release);
     g_swallowedModsLegacy.store(0, std::memory_order_release);
+    g_pointerOn.store(false, std::memory_order_release);
+}
+
+void freecursor::WindowHook::SetPointer(bool aEnabled)
+{
+    if (aEnabled)
+    {
+        const int size = PlayerPointerSize();
+        if (!g_pointer || size != g_pointerSize)
+        {
+            HCURSOR built = BuildPointer(size);
+            if (!built)
+            {
+                Logf("pointer: could not build a %dpx pointer (%lu); the Windows arrow shows instead", size,
+                     GetLastError());
+                g_pointerOn.store(false, std::memory_order_release);
+                return;
+            }
+            if (g_pointer && GetCursor() != g_pointer)
+                DestroyCursor(g_pointer);
+            g_pointer     = built;
+            g_pointerSize = size;
+            Logf("pointer: built %dpx, handle %p", size, static_cast<void*>(g_pointer));
+        }
+    }
+
+    if (g_pointerOn.exchange(aEnabled, std::memory_order_acq_rel) == aEnabled)
+        return;
+
+    // WM_SETCURSOR is not sent while the window holds the mouse capture, and
+    // not until the mouse next moves, so set the pointer directly as well.
+    // SetCursor only affects the calling thread's queue, hence the check.
+    const bool onWindowThread = g_hWnd && GetWindowThreadProcessId(g_hWnd, nullptr) == GetCurrentThreadId();
+    if (aEnabled && onWindowThread)
+        SetCursor(g_pointer);
+    Logf("pointer -> %d (%s)", aEnabled ? 1 : 0, onWindowThread ? "window thread" : "other thread, on next move");
+}
+
+void* freecursor::WindowHook::PointerHandle()
+{
+    return g_pointer;
 }
 
 bool freecursor::WindowHook::SetSwallow(bool aEnabled)

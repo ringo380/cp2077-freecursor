@@ -1,5 +1,35 @@
 # FreeCursor - in-game acceptance checklist
 
+**0.6.0 (2026-09-28): FreeCursor's own pointer, phone detach on by default,
+no patch pin - step 15 is new.** Native and Lua change. Import
+`dist/FreeCursor-0.6.0.zip` (Replace, version 0.6.0), confirm the deployed
+DLL hash is `DE5B3F29...` and that the RED4ext log reports 0.6.0.
+- While detached, the pointer is FreeCursor's: a hollow cyan arrowhead in
+  the game's menu-cursor style, drawn at the Windows pointer size
+  (`CursorBaseSize`, 112 here, times the window's DPI scale; the
+  `pointer: built` line reports the result). It replaces the Windows arrow, so the lime
+  custom pointer colour does not apply while detached.
+- The game's own menu pointer is hidden while detached and comes back on
+  reattach.
+- **Detach in the phone** now defaults on. There is no `settings.json` in
+  the deployed mod folder, so this install picks up the new default.
+- The plugin declares itself runtime-independent (no longer pinned to 2.31).
+- The pointer is proven outside the game: the built cursor has the art's
+  hotspot, and Windows draws it within one colour step of the art on black
+  and white (the Windows arrow, as a control, differs on ~11,000 channels).
+  What only the game can show is Magnifier following it, and the game's
+  pointer staying hidden.
+
+**0.5.4 result (2026-09-27): full pass, every step ticked on the tester's
+word.** The deployed DLL hashes equal to the staged 0.5.4 build. The log
+proof for step 14 is from the 2026-09-22 20:27 session: detached in
+`ModalPopup` at 20:43:07, the popup closed at 20:43:09, reattached in
+gameplay at 20:43:10, and the `100ms after force(false)` sample reads
+`showing=0` and `capture=0000000000000000`. That launch's hook line names
+`Cyberpunk2077.exe` (CET ahead), the order that was already clean before the
+fix; the FreeCursor-ahead order has no logged reattach and passes on the
+tester's word only. Step 9's per-state notes are still unrecorded.
+
 **0.5.4 (2026-09-05): the stuck pointer's real cause found and fixed.** Native
 and Lua change. Import `dist/FreeCursor-0.5.4.zip`, confirm the deployed DLL
 hash matches the staged one, and that the RED4ext log reports version 0.5.4.
@@ -104,23 +134,23 @@ being able to press the key that undoes it.
 
 ## 1. Install and load
 
-- [ ] Import `dist/FreeCursor-0.5.3.zip` through Vortex and deploy.
+- [x] Import `dist/FreeCursor-0.5.4.zip` through Vortex and deploy.
       **Reimport whenever the DLL is rebuilt**, and confirm the deployed
       `red4ext/plugins/FreeCursor/FreeCursor.dll` matches the staged one by
       hash (not size). A crash dump resolved against a `.map` from a different
       build names the wrong function and reads entirely plausible.
-- [ ] Launch, bind the hotkey in CET's Bindings tab to **`Numpad 9`** (**there is no
+- [x] Launch, bind the hotkey in CET's Bindings tab to **`Numpad 9`** (**there is no
       default binding** - the mod does nothing until you set one), load a save.
-- [ ] `red4ext/logs/` contains `FreeCursor loaded` and, a moment later,
+- [x] `red4ext/logs/` contains `FreeCursor loaded` and, a moment later,
       `Window hook installed; previous WndProc belongs to <module>`. Note the
       module: `cyber_engine_tweaks.asi` means FreeCursor is ahead of CET this
       launch (the order that exposed the stuck-hotkey bug);
       `Cyberpunk2077.exe` means CET is ahead. It varies per launch.
-- [ ] The CET console does **not** show `RED4ext plugin not found`.
+- [x] The CET console does **not** show `RED4ext plugin not found`.
 
 ## 2. The startup race
 
-- [ ] Mash the hotkey during the first ~3 seconds after a save finishes loading.
+- [x] Mash the hotkey during the first ~3 seconds after a save finishes loading.
 
 Expected: normal detach/reattach. If instead you see *"couldn't hold the camera
 still; the cursor stays attached"* and the cursor does **not** detach - that is
@@ -128,23 +158,23 @@ the mod correctly refusing to half-work, not a failure. Note whether it happens.
 
 ## 3. Gameplay detach - the core case
 
-- [ ] Press the hotkey during normal play.
-- [ ] Pointer moves freely and Magnifier follows it.
-- [ ] **The camera does not move.**
-- [ ] Press again: pointer re-locks, camera responds normally.
+- [x] Press the hotkey during normal play.
+- [x] Pointer moves freely and Magnifier follows it.
+- [x] **The camera does not move.**
+- [x] Press again: pointer re-locks, camera responds normally.
 
 ## 3b. Keyboard while detached in gameplay - the 0.2.0 fix
 
 All with the cursor detached during normal play (not in a menu):
 
-- [ ] Walk up to an NPC conversation with choices. **Up/Down** moves the
+- [x] Walk up to an NPC conversation with choices. **Up/Down** moves the
       highlight, **Enter** (or `F`) picks it. Try a direct pick too (`R`, `1`).
-- [ ] A **timed** choice: aim Magnifier at the options, read them, pick one
+- [x] A **timed** choice: aim Magnifier at the options, read them, pick one
       with the keys before the timer runs out. This is the use case.
-- [ ] **Hold `T`** for half a second: the phone opens. (A tap is the
+- [x] **Hold `T`** for half a second: the phone opens. (A tap is the
       answer/notification key, not the phone - hold is correct.)
-- [ ] `I` opens the inventory; `Esc` opens the pause menu.
-- [ ] Throughout: **the camera never moves**, even while pressing keys and
+- [x] `I` opens the inventory; `Esc` opens the pause menu.
+- [x] Throughout: **the camera never moves**, even while pressing keys and
       nudging the mouse.
 
 ## 3c. Toggle with a mouse button held - the 0.3.0 fix
@@ -154,44 +184,44 @@ two minutes until a right-click inside a menu. Run it on a launch where the
 log says `previous WndProc belongs to cyber_engine_tweaks.asi`; on the other
 order it never reproduced and passing proves less.
 
-- [ ] In gameplay, attached: **hold right-click** (aim), press `Numpad 9`, release
+- [x] In gameplay, attached: **hold right-click** (aim), press `Numpad 9`, release
       right-click. Press `Numpad 9` again. It must reattach, immediately.
-- [ ] Same with **left-click** held, and with the **middle button** held.
-- [ ] Detach with nothing held, then click left and right a few times while
+- [x] Same with **left-click** held, and with the **middle button** held.
+- [x] Detach with nothing held, then click left and right a few times while
       detached (the game must not react - clicks are still swallowed in
       gameplay), then press `Numpad 9`. It must reattach.
-- [ ] CET's overlay key still opens the overlay after each of the above.
+- [x] CET's overlay key still opens the overlay after each of the above.
 
 ## 4. Refcount probe - the most important unverified assumption
 
-- [ ] Detach in gameplay.
-- [ ] Cross from gameplay into a menu and back at least five times (open/close inventory or phone).
-- [ ] Press the hotkey **once**.
-- [ ] The pointer must fully re-lock.
+- [x] Detach in gameplay.
+- [x] Cross from gameplay into a menu and back at least five times (open/close inventory or phone).
+- [x] Press the hotkey **once**.
+- [x] The pointer must fully re-lock.
 
 If it stays free, the underlying native is counting rather than setting, and
 that needs a fix. This is the single highest-value check here.
 
 ## 5. Menu / phone detach
 
-- [ ] Open the phone, detach.
-- [ ] Clicks work. Keys work (arrows move through contacts/messages).
-- [ ] A **plain wheel scrolls the texting thread** (0.3.0: the wheel reaches
+- [x] Open the phone, detach.
+- [x] Clicks work. Keys work (arrows move through contacts/messages).
+- [x] A **plain wheel scrolls the texting thread** (0.3.0: the wheel reaches
       the game unless Ctrl+Alt are held).
-- [ ] **Ctrl+Alt+wheel zooms Magnifier and does NOT scroll the thread** -
+- [x] **Ctrl+Alt+wheel zooms Magnifier and does NOT scroll the thread** -
       check this inside the texting thread specifically, not just in gameplay.
-- [ ] In gameplay, detached: plain wheel cycles weapons as normal;
+- [x] In gameplay, detached: plain wheel cycles weapons as normal;
       Ctrl+Alt+wheel zooms Magnifier only. Camera never moves either way.
-- [ ] Reattach.
+- [x] Reattach.
 
 ## 6. Clicking after crossing into a menu
 
-- [ ] Detach in gameplay, cross into a menu, click something. Clicks must work.
+- [x] Detach in gameplay, cross into a menu, click something. Clicks must work.
 
 ## 7. Crossing while detached
 
-- [ ] Cursor stays free throughout.
-- [ ] Camera holds still only in gameplay, moves normally in menus.
+- [x] Cursor stays free throughout.
+- [x] Camera holds still only in gameplay, moves normally in menus.
 
 ## 8. Auto-reattach - one per trigger
 
@@ -220,36 +250,37 @@ matters. Your answers decide the fix. Run before 0.5.1; reported done on
 
 ## 10. Interruptions
 
-- [ ] Alt-tab away while detached in gameplay, return. No stuck swallow;
+- [x] Alt-tab away while detached in gameplay, return. No stuck swallow;
       hotkey still works.
-- [ ] Open the CET overlay while detached in gameplay. Note whether the overlay
+- [x] Open the CET overlay while detached in gameplay. Note whether the overlay
       responds to the mouse. Confirm the escape route works: close the overlay
       with the keyboard, then press the hotkey.
-- [ ] CET `/reload` while detached. Cursor and swallow should clear themselves
+- [x] CET `/reload` while detached. Cursor and swallow should clear themselves
       **immediately**, with no keypress needed.
-- [ ] Exit the game while detached. Pointer is normal on the desktop.
+- [x] Exit the game while detached. Pointer is normal on the desktop.
 
 ## 12. Settings menu and automatic detach - new in 0.4.0
 
-- [ ] Open Mod Configuration Menu (or Settings > Mods). A **FreeCursor** tab
-      exists with an **Automatic detach** section and two switches, both off.
-- [ ] Turn on **Detach in the phone**. Close the menu, hold `T`: the cursor
+- [x] Open Mod Configuration Menu (or Settings > Mods). A **FreeCursor** tab
+      exists with an **Automatic detach** section and two switches: phone
+      on, menus off (0.6.0; both were off before).
+- [x] Turn on **Detach in the phone**. Close the menu, hold `T`: the cursor
       frees itself within a moment of the phone opening. Clicks and the wheel
       work in the thread. Close the phone: the cursor locks and the camera
       responds. Repeat three times.
-- [ ] Manual wins: detach with `Numpad 9` first, then open and close the phone. The
+- [x] Manual wins: detach with `Numpad 9` first, then open and close the phone. The
       cursor stays free the whole time; `Numpad 9` reattaches.
-- [ ] Hotkey inside: let the phone detach you, press `Numpad 9` while it is open
+- [x] Hotkey inside: let the phone detach you, press `Numpad 9` while it is open
       (locks), then close the phone. Nothing further happens.
-- [ ] Turn on **Detach in menus**. Open the inventory: cursor frees. Close it:
+- [x] Turn on **Detach in menus**. Open the inventory: cursor frees. Close it:
       cursor locks. Open the map, then the journal, then the pause menu -
       each frees on entry and locks on exit. Open the phone from a menu and
       back: no flicker, still detached until both are closed.
-- [ ] Turn a switch off while its trigger is active (phone open, or in the
+- [x] Turn a switch off while its trigger is active (phone open, or in the
       menu itself). The cursor locks immediately.
-- [ ] Quit to desktop and relaunch: both switches are as you left them
+- [x] Quit to desktop and relaunch: both switches are as you left them
       (`settings.json` in the mod folder holds them).
-- [ ] With **Detach in the phone** on, take an incoming call during
+- [x] With **Detach in the phone** on, take an incoming call during
       gameplay. The cursor must **not** free: a call keeps you in first
       person with full control, and the trigger requires the game to have
       left the default context. Open the messenger after hanging up: it
@@ -309,16 +340,45 @@ arrived after the swallow armed and was eaten, so CET never released. The
 split matched hook order exactly: FreeCursor outermost stuck 2 of 2, CET
 outermost clean 3 of 3.
 
-- [ ] Detach inside a messenger thread (the GenText popup), close the
+- [x] Detach inside a messenger thread (the GenText popup), close the
       thread while detached, reattach in gameplay. The pointer must hide.
-- [ ] The `100ms after force(false)` sample of that reattach must read
+- [x] The `100ms after force(false)` sample of that reattach must read
       `showing=0` and `capture=0000000000000000`. Both are provable from
       the RED4ext log without watching the screen.
-- [ ] Note which module the `Window hook installed` line names: the fix must
+- [x] Note which module the `Window hook installed` line names: the fix must
       hold whether FreeCursor is ahead of CET (`cyber_engine_tweaks.asi`) or
       behind it (`Cyberpunk2077.exe`).
 
 ## 11. Logs
 
-- [ ] `red4ext/logs/` shows paired `ForceCursor(true)` / `ForceCursor(false)`
+- [x] `red4ext/logs/` shows paired `ForceCursor(true)` / `ForceCursor(false)`
       transitions and no repeating spam.
+
+## 15. FreeCursor's pointer and the phone default - new in 0.6.0
+
+- [ ] Before detaching at all this launch: open the inventory, map and
+      phone, hover and click. The game's own pointer behaves exactly as
+      before (FreeCursor only touches it while detached).
+- [ ] `red4ext/logs/freecursor-<date>.log` shows `pointer: built <n>px` on
+      the first detach, and `pointer -> 1 (window thread)` on every detach.
+      `other thread, on next move` instead means the pointer only appears
+      once the mouse moves; note it.
+- [ ] In gameplay, detach: the cyan arrowhead appears where the Windows arrow
+      used to. **Magnifier follows it** as you move the mouse.
+- [ ] The `100ms after force(true)` sample reads `showing=1 ... ours=1`.
+- [ ] Open the inventory while detached: only the cyan arrowhead shows, not
+      the game's own pointer beside it. Hover items and click: clicks still
+      land where the arrowhead's tip is.
+- [ ] Reattach inside the inventory: the game's own pointer comes back (move
+      the mouse once if it does not). Detach again: it hides again.
+- [ ] Reattach in gameplay **without moving the mouse**: the pointer hides,
+      and the `100ms after force(false)` sample reads `showing=0`.
+- [ ] CET `/reload` while detached inside a menu, then move the mouse in
+      the menu: the game's own pointer is back.
+- [ ] Hold `T` to open the phone with no hotkey press: it detaches by itself
+      (the new default), with the cyan arrowhead. Close the phone: it
+      reattaches.
+- [ ] Open a messenger thread, detach, close it while detached, reattach in
+      gameplay: the pointer hides (the 0.5.4 case, with the new pointer).
+- [ ] Open the CET overlay while detached and close it again: note which
+      pointer shows inside the overlay.
